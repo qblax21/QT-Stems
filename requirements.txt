@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+demucs
+SoundFile
+numpy<2
+# PyTorch is installed separately (see README) so you can pick CPU or CUDA.

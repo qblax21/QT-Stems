@@ -1,0 +1,9 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+stems/
+last_error.txt
+backend_log.txt
+*.log
+.claude/

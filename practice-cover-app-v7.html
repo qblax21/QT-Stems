@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick Tune V7 — Demucs Self-Hosted</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@500,700&display=swap" rel="stylesheet">
+  <style>
+    :root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f9f8f5;--surface2:#fbfbf9;--offset:#f3f0ec;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--faint:#bab9b4;--primary:#01696f;--soft:#d8ebe7;--success:#437a22;--warning:#964219;--error:#a13544;--inverse:#f9f8f4;--font:'Satoshi',system-ui,sans-serif;--display:'Cabinet Grotesk','Satoshi',sans-serif;--shadow:0 18px 44px rgba(0,0,0,.12)}
+    [data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--surface2:#201f1d;--offset:#242321;--border:#393836;--text:#cdccca;--muted:#8f8d89;--faint:#65635f;--primary:#4f98a3;--soft:#2d3a3d;--success:#6daa45;--warning:#e8af34;--error:#dd6974;--inverse:#2b2a28;--shadow:0 22px 54px rgba(0,0,0,.42)}
+    *{box-sizing:border-box;margin:0;padding:0} body{min-height:100dvh;background:radial-gradient(circle at top,rgba(79,152,163,.18),transparent 28%),radial-gradient(circle at bottom right,rgba(232,175,52,.08),transparent 20%),var(--bg);color:var(--text);font:400 clamp(1rem,.95rem + .25vw,1.1rem)/1.55 var(--font)} button,input,select,textarea{font:inherit;color:inherit} button{cursor:pointer;border:none;background:none} .app{max-width:500px;margin:0 auto;padding:1rem;min-height:100dvh;display:flex;align-items:center;justify-content:center} .phone{width:100%;min-height:980px;background:color-mix(in oklab,var(--surface) 96%, black 4%);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:32px;overflow:hidden;box-shadow:var(--shadow);display:grid;grid-template-rows:auto 1fr auto}
+    .topbar{display:flex;justify-content:space-between;align-items:center;padding:1rem;border-bottom:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .brand{display:flex;align-items:center;gap:.75rem} .logo{width:40px;height:40px;border-radius:14px;background:linear-gradient(145deg,var(--primary),color-mix(in oklab,var(--primary) 65%, white 35%));display:grid;place-items:center;color:#fff;font-weight:800;letter-spacing:.04em} .brand strong{display:block;font-size:.95rem} .brand span,.subtle{font-size:.78rem;color:var(--muted)} .iconbtn{width:40px;height:40px;border-radius:999px;background:var(--surface2);display:grid;place-items:center;border:1px solid color-mix(in oklab,var(--text) 8%, transparent)}
+    .screen{padding:1rem;display:flex;flex-direction:column;gap:1rem;overflow:auto}.hidden{display:none}.hero h1{font-family:var(--display);font-size:clamp(1.65rem,1.2rem + 1.4vw,2.2rem);line-height:1.02;letter-spacing:-.03em;margin-bottom:.5rem}.hero p{font-size:.95rem;color:var(--muted);max-width:35ch}.badges{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem}.badge{padding:.45rem .7rem;border-radius:999px;background:var(--soft);color:var(--primary);font-size:.76rem;font-weight:700}
+    .card{background:var(--surface2);border:1px solid color-mix(in oklab,var(--text) 8%, transparent);border-radius:1rem;padding:1rem;box-shadow:0 2px 8px rgba(0,0,0,.14)} .stack{display:flex;flex-direction:column;gap:.75rem} .row{display:flex;align-items:center;justify-content:space-between;gap:.75rem} .primary,.secondary,.tertiary{padding:1rem;border-radius:16px;font-weight:700;text-align:center}.primary{background:var(--primary);color:var(--inverse)}.secondary{background:var(--offset)}.tertiary{border:1px solid color-mix(in oklab,var(--text) 10%, transparent)}
+    .grid2,.grid3,.grid4{display:grid;gap:.5rem}.grid2{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)} .pill,.mode{padding:.85rem .6rem;border-radius:14px;background:var(--offset);font-size:.9rem;border:1px solid transparent}.pill.active,.mode.active{background:var(--soft);border-color:color-mix(in oklab,var(--primary) 35%, transparent);color:var(--primary);font-weight:700}
+    .field{display:flex;flex-direction:column;gap:.45rem}.field label{font-size:.78rem;color:var(--muted)} .field input,.field select,.field textarea{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none} .field textarea{min-height:84px;resize:vertical}
+    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}.meta .chip{padding:.8rem .55rem;border-radius:14px;background:var(--offset);text-align:center}.meta strong{display:block;font-size:.92rem}.meta span{font-size:.75rem;color:var(--muted)}
+    .waveWrap{position:relative}.waveCanvas{width:100%;height:132px;display:block;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01)),var(--offset);border:1px solid color-mix(in oklab,var(--text) 8%, transparent)} .marker,.playhead{position:absolute;top:8px;bottom:8px;transform:translateX(-50%)} .marker{width:4px;border-radius:999px;background:#fff;opacity:.92;touch-action:none}.marker:before{content:'';position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.15)} .playhead{width:2px;background:color-mix(in oklab,var(--primary) 70%, white 30%);box-shadow:0 0 0 6px rgba(79,152,163,.12)} .playhead:before{content:'';position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:10px;height:10px;border-radius:999px;background:color-mix(in oklab,var(--primary) 70%, white 30%)}
+    .smallActions,.transport,.ctaGrid,.persistGrid{display:grid;gap:.5rem}.smallActions{grid-template-columns:repeat(3,1fr)}.transport{grid-template-columns:repeat(5,1fr)}.ctaGrid,.persistGrid{grid-template-columns:1fr 1fr}.transport button,.smallBtn{padding:.82rem .45rem;border-radius:14px;background:var(--offset);font-weight:700;font-size:.9rem}.transport .play{background:var(--primary);color:var(--inverse)}
+    .toggle{width:58px;height:34px;border-radius:999px;background:rgba(109,170,69,.24);padding:4px}.toggle span{display:block;width:26px;height:26px;border-radius:999px;background:var(--success);transform:translateX(24px)}
+    .stemList{display:flex;flex-direction:column;gap:.7rem}.stem{display:grid;grid-template-columns:84px 1fr auto;gap:.7rem;align-items:center}.stemName{font-weight:700}.stemSub{font-size:.74rem;color:var(--muted)} .stemGain{display:flex;align-items:center;gap:.4rem}.stemGain input{width:100%;accent-color:var(--primary)} .miniControls{display:flex;gap:.35rem}.miniControls button{padding:.5rem .62rem;border-radius:10px;background:var(--offset);font-size:.74rem;font-weight:700}.miniControls .solo.active{background:rgba(232,175,52,.18);color:var(--warning)} .miniControls .mute.active{background:rgba(221,105,116,.18);color:var(--error)} .miniControls .cover.active{background:rgba(109,170,69,.18);color:var(--success)}
+    .jobList{display:flex;flex-direction:column;gap:.45rem}.job{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;padding:.8rem .9rem;border-radius:14px;background:var(--offset)}.dot{width:10px;height:10px;border-radius:999px;background:var(--faint)}.job.done .dot{background:var(--success)}.job.live .dot{background:var(--primary)}.job.wait .dot{background:var(--warning)}
+    .note{padding:.8rem;border-radius:14px;background:var(--offset);color:var(--muted);font-size:.86rem}.sessionCard .tags{display:flex;gap:.45rem;flex-wrap:wrap}.tag{padding:.35rem .55rem;border-radius:999px;background:var(--offset);font-size:.74rem} .footerNav{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;padding:.75rem;border-top:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .footerNav button{padding:.7rem .25rem;border-radius:12px;font-size:.76rem;font-weight:700;color:var(--muted)} .footerNav button.active{background:var(--soft);color:var(--primary)} .good{color:var(--success)} .warn{color:var(--warning)}
+  </style>
+</head>
+<body>
+<main class="app"><section class="phone">
+<header class="topbar"><div class="brand"><div class="logo">QT</div><div><strong>Quick Tune</strong><span>v7 demucs self-hosted</span></div></div><button class="iconbtn" id="themeBtn">◐</button></header>
+<section class="screen" id="importScreen">
+  <div class="hero"><div class="badges"><span class="badge">No paid provider required</span><span class="badge">Demucs-first</span><span class="badge">Self-hosted</span></div><h1>Run the separator yourself.</h1><p>V7 is designed for your own Demucs backend so you can upload a song, run separation, and hydrate real stems without a paid API.</p></div>
+  <div class="card stack">
+    <div class="row"><strong>Backend</strong><span class="subtle">local by default</span></div>
+    <div class="field"><label for="backendBase">Backend base URL</label><input id="backendBase" value="http://localhost:8000" /></div>
+    <div class="grid3" id="modelGrid"><button class="mode active" data-model="htdemucs">4 stems</button><button class="mode" data-model="htdemucs_6s">6 stems</button><button class="mode" data-model="mdx_extra">Vocals split</button></div>
+    <div class="grid2" id="deviceGrid"><button class="mode active" data-device="cpu">CPU</button><button class="mode" data-device="cuda">GPU</button></div>
+    <div class="note" id="backendSummary">htdemucs on CPU. Best free path, slowest option.</div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Source audio</strong><span class="subtle">local upload</span></div>
+    <div class="field"><label for="audioFile">Pick a song file</label><input id="audioFile" type="file" accept="audio/*" /></div>
+    <div class="persistGrid"><button class="primary" id="runDemucsBtn">Run Demucs</button><button class="secondary" id="demoHydrateBtn">Demo Stems</button></div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Separation job</strong><span class="subtle" id="jobStatusBadge">waiting</span></div>
+    <div class="jobList" id="jobList"></div>
+    <div class="note" id="jobNote">This version expects your own backend to receive the file, run Demucs, save stems, and return their URLs.</div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Returned stems</strong><span class="subtle">hydration preview</span></div>
+    <div class="field"><label for="vocalsUrl">Vocals</label><input id="vocalsUrl" placeholder="Returned by backend" /></div>
+    <div class="field"><label for="drumsUrl">Drums</label><input id="drumsUrl" placeholder="Returned by backend" /></div>
+    <div class="field"><label for="bassUrl">Bass</label><input id="bassUrl" placeholder="Returned by backend" /></div>
+    <div class="field"><label for="otherUrl">Other / Instrumental</label><input id="otherUrl" placeholder="Returned by backend" /></div>
+    <div class="field"><label for="guitarUrl">Guitar</label><input id="guitarUrl" placeholder="Available in 6-stem model" /></div>
+    <div class="field"><label for="pianoUrl">Piano</label><input id="pianoUrl" placeholder="Available in 6-stem model" /></div>
+    <button class="tertiary" id="openPracticeBtn">Open Practice</button>
+  </div>
+</section>
+<section class="screen hidden" id="practiceScreen">
+  <div class="row"><div><h2 id="songTitle" style="font-size:1.35rem;line-height:1.1">No song loaded</h2><p id="songMeta" class="subtle">Hydrate stems from your backend.</p></div><div class="badge" id="modeStatus">Guitar muted</div></div>
+  <div class="meta"><div class="chip"><strong id="timeNow">0:00</strong><span>Now</span></div><div class="chip"><strong id="timeDur">0:00</strong><span>Length</span></div><div class="chip"><strong id="repsCount">0x</strong><span>Loop reps</span></div></div>
+  <div class="card stack">
+    <div class="row"><span id="loopLabel" class="subtle">Loop 0:00 → 0:00</span><span id="rateLabel" class="subtle">Speed 100%</span></div>
+    <div class="waveWrap" id="waveWrap"><canvas id="waveCanvas" class="waveCanvas" width="420" height="132"></canvas><div class="marker" id="markerA" style="left:0%"></div><div class="marker" id="markerB" style="left:100%"></div><div class="playhead" id="playhead" style="left:0%"></div></div>
+    <div class="smallActions"><button class="smallBtn" id="setA">Set A</button><button class="smallBtn" id="setB">Set B</button><button class="smallBtn" id="loopToggle">Loop On</button></div>
+    <div class="transport"><button id="back5">⟲5</button><button id="toA">To A</button><button class="play" id="playBtn">▶</button><button id="toB">To B</button><button id="fwd5">5⟳</button></div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Target part</strong><button class="toggle" id="coverToggle"><span></span></button></div>
+    <div class="grid3" id="targetGrid"><button class="pill active">Guitar</button><button class="pill">Bass</button><button class="pill">Drums</button><button class="pill">Vocals</button><button class="pill">Piano</button><button class="pill">Other</button></div>
+  </div>
+  <div class="card stack"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">real stems when hydrated</span></div><div class="stemList" id="stemList"></div></div>
+  <div class="grid2"><button class="secondary" id="speedDown">- Speed</button><button class="secondary" id="speedUp">+ Speed</button></div>
+  <div class="note" id="speedValue" style="text-align:center">100%</div>
+  <div class="card stack"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
+  <div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save Session</button><button class="secondary" id="viewSessionsBtn">Sessions</button><button class="tertiary" id="exportCurrentBtn">Export Session</button></div>
+</section>
+<section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Session packs save loop range, target instrument, Demucs model, and returned stem URLs.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
+<section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Local setup</h1><p>Run the Python backend on your own machine, keep the frontend static, and only pay for hardware if you ever need more speed.</p></div><div class="card stack"><div class="row"><span>Backend mode</span><span class="subtle">Self-hosted Demucs</span></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div></section>
+<nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
+</section></main>
+<audio id="masterAudio" crossorigin="anonymous"></audio>
+<script>
+const screens={import:document.getElementById('importScreen'),practice:document.getElementById('practiceScreen'),sessions:document.getElementById('sessionsScreen'),settings:document.getElementById('settingsScreen')};
+const navButtons=[...document.querySelectorAll('.footerNav button')];
+const masterAudio=document.getElementById('masterAudio');
+const waveCanvas=document.getElementById('waveCanvas'); const waveWrap=document.getElementById('waveWrap'); const ctx=waveCanvas.getContext('2d');
+const pipeline=['Receive file','Queue separation','Run Demucs model','Write stems to disk','Return public URLs','Hydrate player'];
+const stemDefaults={Vocals:{volume:78,mute:false,solo:false,url:''},Drums:{volume:72,mute:false,solo:false,url:''},Bass:{volume:72,mute:false,solo:false,url:''},Guitar:{volume:78,mute:false,solo:false,url:''},Piano:{volume:64,mute:false,solo:false,url:''},Other:{volume:78,mute:false,solo:false,url:''}};
+let selectedModel='htdemucs', selectedDevice='cpu', selectedTarget='Guitar', coverMode=true, loopEnabled=true, speed=1, loopA=0, loopB=1, loopReps=0, dragMode=null, waveformData=null, sessions=[]; let fileName='No song loaded'; let objectUrl=null; let audioCtx; const stemState=structuredClone(stemDefaults); const stemAudioEls={};
+function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name));}
+navButtons.forEach(btn=>btn.addEventListener('click',()=>showScreen(btn.dataset.screen)));
+function formatTime(sec){if(!isFinite(sec)) return '0:00'; const m=Math.floor(sec/60), s=Math.floor(sec%60).toString().padStart(2,'0'); return `${m}:${s}`}
+function backendBase(){return document.getElementById('backendBase').value.replace(/\/$/,'')}
+function renderPipeline(active=-1){const host=document.getElementById('jobList'); host.innerHTML=''; pipeline.forEach((step,i)=>{const d=document.createElement('div'); const cls=i<active?'done':i===active?'live':(active>=0?'wait':''); d.className=`job ${cls}`.trim(); d.innerHTML=`<span class="dot"></span><span>${step}</span><span class="subtle">${i<active?'done':i===active?'running':'pending'}</span>`; host.appendChild(d);});}
+function syncBackendSummary(){document.getElementById('backendSummary').textContent=`${selectedModel} on ${selectedDevice}. ${selectedDevice==='cpu'?'Best free path, slowest option.':'Faster if your machine has CUDA.'}`; document.getElementById('settingsModel').textContent=selectedModel; document.getElementById('settingsDevice').textContent=selectedDevice;}
+function updateLoopUI(){const dur=masterAudio.duration||0; const a=loopA*dur,b=Math.max(loopB*dur,a+.2); document.getElementById('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; document.getElementById('markerA').style.left=`${loopA*100}%`; document.getElementById('markerB').style.left=`${loopB*100}%`; drawWaveform();}
+function updatePlayhead(){const dur=masterAudio.duration||0; const p=dur?(masterAudio.currentTime/dur):0; document.getElementById('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; document.getElementById('timeNow').textContent=formatTime(masterAudio.currentTime); syncStemTimes();}
+function resizeCanvas(){const ratio=Math.max(1,window.devicePixelRatio||1), rect=waveCanvas.getBoundingClientRect(); waveCanvas.width=Math.floor(rect.width*ratio); waveCanvas.height=Math.floor(rect.height*ratio); ctx.setTransform(ratio,0,0,ratio,0,0); drawWaveform();}
+window.addEventListener('resize',resizeCanvas);
+function drawWaveform(){const w=waveCanvas.clientWidth,h=waveCanvas.clientHeight; ctx.clearRect(0,0,w,h); const grad=ctx.createLinearGradient(0,0,0,h); grad.addColorStop(0,'rgba(255,255,255,0.05)'); grad.addColorStop(1,'rgba(255,255,255,0.01)'); ctx.fillStyle=grad; ctx.fillRect(0,0,w,h); const loopStart=loopA*w, loopEnd=loopB*w; ctx.fillStyle='rgba(79,152,163,0.12)'; ctx.fillRect(loopStart,0,Math.max(0,loopEnd-loopStart),h); const bars=120, bw=w/bars, mid=h/2; const samples=waveformData||Array.from({length:bars},(_,i)=>.14+.56*Math.abs(Math.sin(i*.22))); for(let i=0;i<bars;i++){const x=i*bw; const v=samples[Math.floor(i*(samples.length/bars))]||.1; const bh=Math.max(6,v*(h*.82)); ctx.fillStyle=(x>=loopStart&&x<=loopEnd)?'rgba(79,152,163,0.95)':'rgba(205,204,202,0.34)'; ctx.fillRect(x,mid-bh/2,Math.max(2,bw-2),bh);}}
+let waveformJob=0;
+async function buildWaveformFromFile(file){const job=++waveformJob; const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent); if(isMobile||file.size>25*1024*1024){waveformData=null; drawWaveform(); return;} try{const arrayBuffer=await file.arrayBuffer(); const AC=window.AudioContext||window.webkitAudioContext; const temp=new AC(); const decoded=await temp.decodeAudioData(arrayBuffer.slice(0)); const raw=decoded.getChannelData(0); const samples=600; const block=Math.floor(raw.length/samples)||1; const filtered=[]; for(let i=0;i<samples;i++){let sum=0; const start=i*block, end=Math.min(raw.length,start+block); for(let j=start;j<end;j++) sum+=Math.abs(raw[j]); filtered.push(sum/Math.max(1,end-start));} const max=Math.max(...filtered,.001); temp.close(); if(job!==waveformJob) return; waveformData=filtered.map(v=>v/max); drawWaveform();}catch(e){waveformData=null; drawWaveform();}}
+function pointerToRatio(clientX){const rect=waveWrap.getBoundingClientRect(); return Math.min(1,Math.max(0,(clientX-rect.left)/rect.width));}
+function ensureAudioCtx(){if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();}
+function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); document.getElementById('modeStatus').textContent=`${name} muted`; renderStemList(); updateMix();}
+function stemKeys(){return Object.keys(stemState)}
+function getTransportSource(){const available=stemKeys().find(k=>stemState[k].url); return available||'Other'}
+function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'hydrated stem':'no URL yet'}</div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; renderStemList(); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; renderStemList(); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
+function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; stemAudioEls[name]=el; return el;}
+function syncStemTimes(){for(const el of Object.values(stemAudioEls)){if(Math.abs(el.currentTime-masterAudio.currentTime)>0.12) el.currentTime=masterAudio.currentTime;}}
+function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} el.volume=vol; el.playbackRate=speed;}}
+async function playAll() {
+  ensureAudioCtx();
+  await audioCtx.resume();
+
+  const active = Object.entries(stemState).filter(([, s]) => s.url);
+  if (!active.length) {
+    if (masterAudio.src) {
+      masterAudio.muted = false;
+      masterAudio.volume = 1;
+      return masterAudio.play();
+    }
+    return;
+  }
+
+  masterAudio.muted = true;
+  masterAudio.volume = 0;
+
+  if (masterAudio.src) {
+    try {
+      if (masterAudio.paused) await masterAudio.play();
+    } catch (e) {}
+  }
+
+  for (const [name] of active) {
+    const el = ensureStemAudio(name);
+    el.currentTime = masterAudio.currentTime || 0;
+    el.playbackRate = speed;
+  }
+
+  await Promise.all(
+    active.map(async ([name]) => {
+      const el = ensureStemAudio(name);
+      try {
+        await el.play();
+      } catch (e) {}
+    })
+  );
+
+  updateMix();
+}
+function pauseAll() {
+  for (const el of Object.values(stemAudioEls)) el.pause();
+  masterAudio.pause();
+}
+function setStemUrls(outputs) {
+  const base = backendBase();
+
+  const absolutize = (url) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return `${base}${url}`;
+    return `${base}/${url}`;
+  };
+
+  const map = {
+    Vocals: absolutize(outputs.vocals || ""),
+    Drums: absolutize(outputs.drums || ""),
+    Bass: absolutize(outputs.bass || ""),
+    Guitar: absolutize(outputs.guitar || ""),
+    Piano: absolutize(outputs.piano || ""),
+    Other: absolutize(outputs.other || outputs.instrumental || "")
+  };
+
+  Object.entries(map).forEach(([name, url]) => {
+    stemState[name].url = url || "";
+    const el = ensureStemAudio(name);
+    if (url) {
+      el.src = url;
+      el.load();
+    } else {
+      el.removeAttribute("src");
+      el.load();
+    }
+  });
+
+  document.getElementById("vocalsUrl").value = map.Vocals;
+  document.getElementById("drumsUrl").value = map.Drums;
+  document.getElementById("bassUrl").value = map.Bass;
+  document.getElementById("otherUrl").value = map.Other;
+  document.getElementById("guitarUrl").value = map.Guitar;
+  document.getElementById("pianoUrl").value = map.Piano;
+
+  let fallbackTarget = selectedTarget;
+  if (!map[fallbackTarget]) {
+    fallbackTarget =
+      map.Vocals ? "Vocals" :
+      map.Other ? "Other" :
+      map.Drums ? "Drums" :
+      map.Bass ? "Bass" :
+      map.Guitar ? "Guitar" :
+      map.Piano ? "Piano" :
+      "Other";
+    setTarget(fallbackTarget);
+  }
+
+  const masterUrl = map[fallbackTarget];
+  if (masterUrl) {
+    const wasPaused = masterAudio.paused;
+    const oldTime = masterAudio.currentTime || 0;
+
+    masterAudio.pause();
+    masterAudio.src = masterUrl;
+    masterAudio.muted = true;
+    masterAudio.volume = 0;
+    masterAudio.load();
+
+    masterAudio.addEventListener("loadedmetadata", () => {
+      try {
+        masterAudio.currentTime = Math.min(oldTime, Math.max(0, (masterAudio.duration || 0) - 0.05));
+      } catch (e) {}
+      syncStemTimes();
+      updatePlayhead();
+      if (!wasPaused) playAll();
+    }, { once: true });
+  }
+
+  renderStemList();
+  updateMix();
+  document.getElementById("mixSummary").textContent = "real stems when hydrated";
+}
+async function checkHealth(){try{const res=await fetch(`${backendBase()}/api/health`); const data=await res.json(); document.getElementById('backendHealthText').textContent=data.status==='ok'?`ok · ${data.device}`:'unavailable'; document.getElementById('backendHealthText').className='subtle good';}catch{document.getElementById('backendHealthText').textContent='backend unreachable'; document.getElementById('backendHealthText').className='subtle warn';}}
+async function runDemucs(){const file=document.getElementById('audioFile').files?.[0]; if(!file){alert('Choose an audio file first.'); return;}
+  const btn=document.getElementById('runDemucsBtn'); const note=document.getElementById('jobNote'); btn.disabled=true;
+  try{
+    renderPipeline(0); document.getElementById('jobStatusBadge').textContent='running'; note.textContent=`Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)... separation can take a few minutes.`;
+    fileName=file.name.replace(/\.[^/.]+$/,''); document.getElementById('songTitle').textContent=fileName; document.getElementById('songMeta').textContent=`Demucs ${selectedModel} · ${selectedDevice}`;
+    if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted=false; masterAudio.volume=1; masterAudio.load();
+    buildWaveformFromFile(file).catch(()=>{});
+    const form=new FormData(); form.append('file',file); form.append('model',selectedModel); form.append('device',selectedDevice);
+    renderPipeline(2);
+    const res=await fetch(`${backendBase()}/api/demucs/separate`,{method:'POST',body:form});
+    let data={}; try{data=await res.json();}catch{}
+    if(!res.ok) throw new Error(data.detail||data.error||`Separation failed (HTTP ${res.status})`);
+    for(let i=3;i<pipeline.length;i++){renderPipeline(i); await new Promise(r=>setTimeout(r,220));}
+    setStemUrls(data.outputs||{});
+    document.getElementById('jobStatusBadge').textContent='done';
+    document.getElementById('jobNote').textContent=`Completed with ${data.model || selectedModel} on ${data.device || selectedDevice}.`;
+    showScreen('practice');
+  }catch(err){
+    document.getElementById('jobStatusBadge').textContent='failed';
+    document.getElementById('jobNote').textContent=(err.message==='Failed to fetch'||err.name==='TypeError')?`Could not reach backend at ${backendBase()} (check the address and that the server is running).`:(err.message||'Could not reach backend.');
+  }finally{btn.disabled=false;}
+}
+function exportJson(name,data){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),800);}
+function saveSession(){const dur=masterAudio.duration||0; const data={title:`${fileName} — ${selectedTarget} Cover`,model:selectedModel,device:selectedDevice,target:selectedTarget,loop:{a:loopA,b:loopB,display:`${formatTime(loopA*dur)}–${formatTime(loopB*dur)}`},speed:`${Math.round(speed*100)}%`,stems:Object.fromEntries(Object.entries(stemState).map(([k,v])=>[k,v.url])),notes:document.getElementById('notes').value.trim(),when:'just now'}; sessions.unshift(data); renderSessions(); showScreen('sessions');}
+function renderSessions(){const host=document.getElementById('sessionsList'); host.innerHTML=''; if(!sessions.length){const e=document.createElement('div'); e.className='card note'; e.textContent='No saved sessions yet.'; host.appendChild(e); return;} sessions.forEach((s,i)=>{const card=document.createElement('div'); card.className='card stack sessionCard'; card.innerHTML=`<div class="row"><strong>${s.title}</strong><span class="subtle">${s.when}</span></div><div class="tags"><span class="tag">${s.model}</span><span class="tag">${s.device}</span><span class="tag">${s.speed}</span><span class="tag">${s.loop.display}</span></div><div class="note">${s.notes||'No notes added.'}</div><div class="persistGrid"><button class="primary" data-resume="${i}">Resume</button><button class="secondary" data-export="${i}">Export</button></div>`; host.appendChild(card);}); host.querySelectorAll('[data-export]').forEach(b=>b.addEventListener('click',e=>exportJson('practice-session.json',sessions[Number(e.currentTarget.dataset.export)]))); host.querySelectorAll('[data-resume]').forEach(b=>b.addEventListener('click',()=>showScreen('practice')));}
+masterAudio.addEventListener('loadedmetadata',()=>{document.getElementById('timeDur').textContent=formatTime(masterAudio.duration); updateLoopUI(); updatePlayhead();});
+masterAudio.addEventListener('timeupdate',()=>{updatePlayhead(); const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){masterAudio.currentTime=a; for(const el of Object.values(stemAudioEls)) el.currentTime=a; loopReps+=1; document.getElementById('repsCount').textContent=`${loopReps}x`;}});
+masterAudio.addEventListener('pause',()=>document.getElementById('playBtn').textContent='▶'); masterAudio.addEventListener('play',()=>document.getElementById('playBtn').textContent='❚❚');
+document.getElementById('audioFile').addEventListener('change',async e=>{const file=e.target.files?.[0]; if(file){fileName=file.name.replace(/\.[^/.]+$/,''); document.getElementById('songTitle').textContent=fileName; if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted = false;
+masterAudio.volume = 1; masterAudio.load(); buildWaveformFromFile(file).catch(()=>{});}});
+document.querySelectorAll('#modelGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedModel=btn.dataset.model; document.querySelectorAll('#modelGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
+document.querySelectorAll('#deviceGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedDevice=btn.dataset.device; document.querySelectorAll('#deviceGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
+document.getElementById('runDemucsBtn').addEventListener('click',runDemucs); document.getElementById('demoHydrateBtn').addEventListener('click',()=>{setStemUrls({vocals:'https://cdn.example.com/vocals.mp3',drums:'https://cdn.example.com/drums.mp3',bass:'https://cdn.example.com/bass.mp3',other:'https://cdn.example.com/other.mp3',guitar:'https://cdn.example.com/guitar.mp3',piano:'https://cdn.example.com/piano.mp3'}); showScreen('practice');}); document.getElementById('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); document.getElementById('checkHealthBtn').addEventListener('click',checkHealth);
+document.getElementById('playBtn').addEventListener('click',async ()=>{if(masterAudio.paused){await playAll(); if(masterAudio.src && !masterAudio.paused){} else if(masterAudio.src){try{await masterAudio.play()}catch(e){}}} else pauseAll();});
+document.getElementById('back5').addEventListener('click',()=>{masterAudio.currentTime=Math.max(0,masterAudio.currentTime-5); syncStemTimes();}); document.getElementById('fwd5').addEventListener('click',()=>{masterAudio.currentTime=Math.min(masterAudio.duration||0,masterAudio.currentTime+5); syncStemTimes();}); document.getElementById('toA').addEventListener('click',()=>{masterAudio.currentTime=loopA*(masterAudio.duration||0); syncStemTimes();}); document.getElementById('toB').addEventListener('click',()=>{masterAudio.currentTime=loopB*(masterAudio.duration||0); syncStemTimes();});
+document.getElementById('setA').addEventListener('click',()=>{if(!masterAudio.duration)return; loopA=Math.min(loopB-.01,Math.max(0,masterAudio.currentTime/masterAudio.duration)); updateLoopUI();}); document.getElementById('setB').addEventListener('click',()=>{if(!masterAudio.duration)return; loopB=Math.max(loopA+.01,Math.min(1,masterAudio.currentTime/masterAudio.duration)); updateLoopUI();}); document.getElementById('loopToggle').addEventListener('click',e=>{loopEnabled=!loopEnabled; e.currentTarget.textContent=loopEnabled?'Loop On':'Loop Off'});
+document.getElementById('speedDown').addEventListener('click',()=>{speed=Math.max(.5,Math.round((speed-.05)*100)/100); masterAudio.playbackRate=speed; for(const el of Object.values(stemAudioEls)) el.playbackRate=speed; document.getElementById('speedValue').textContent=`${Math.round(speed*100)}%`; document.getElementById('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;});
+document.getElementById('speedUp').addEventListener('click',()=>{speed=Math.min(1.5,Math.round((speed+.05)*100)/100); masterAudio.playbackRate=speed; for(const el of Object.values(stemAudioEls)) el.playbackRate=speed; document.getElementById('speedValue').textContent=`${Math.round(speed*100)}%`; document.getElementById('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;});
+document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.addEventListener('click',()=>setTarget(btn.textContent.trim())));
+document.getElementById('coverToggle').addEventListener('click',()=>{coverMode=!coverMode; const knob=document.querySelector('#coverToggle span'); document.getElementById('coverToggle').style.background=coverMode?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; knob.style.transform=coverMode?'translateX(24px)':'translateX(0)'; updateMix();});
+document.getElementById('saveSessionBtn').addEventListener('click',saveSession); document.getElementById('viewSessionsBtn').addEventListener('click',()=>showScreen('sessions')); document.getElementById('exportCurrentBtn').addEventListener('click',()=>exportJson('current-practice-session.json',{model:selectedModel,device:selectedDevice,target:selectedTarget,notes:document.getElementById('notes').value.trim()})); document.getElementById('exportAllBtn').addEventListener('click',()=>exportJson('practice-session-pack.json',{sessions})); document.getElementById('importPack').addEventListener('change',async e=>{const f=e.target.files?.[0]; if(!f) return; try{const parsed=JSON.parse(await f.text()); sessions=Array.isArray(parsed.sessions)?[...parsed.sessions,...sessions]:[parsed,...sessions]; renderSessions(); showScreen('sessions');}catch{}});
+document.getElementById('themeBtn').addEventListener('click',()=>{const root=document.documentElement; root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark'); setTimeout(drawWaveform,30);});
+waveCanvas.addEventListener('click',e=>{if(!masterAudio.duration) return; masterAudio.currentTime=pointerToRatio(e.clientX)*masterAudio.duration; syncStemTimes(); updatePlayhead();}); document.getElementById('markerA').addEventListener('pointerdown',e=>{dragMode='A'; e.currentTarget.setPointerCapture(e.pointerId)}); document.getElementById('markerB').addEventListener('pointerdown',e=>{dragMode='B'; e.currentTarget.setPointerCapture(e.pointerId)}); waveWrap.addEventListener('pointermove',e=>{if(!dragMode) return; const ratio=pointerToRatio(e.clientX); if(dragMode==='A') loopA=Math.min(loopB-.01,ratio); if(dragMode==='B') loopB=Math.max(loopA+.01,ratio); updateLoopUI();}); waveWrap.addEventListener('pointerup',()=>dragMode=null); waveWrap.addEventListener('pointerleave',()=>dragMode=null);
+if(location.protocol.startsWith('http')&&!['localhost','127.0.0.1',''].includes(location.hostname)) document.getElementById('backendBase').value=`http://${location.hostname}:8000`;
+renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar');
+</script>
+</body>
+</html>
