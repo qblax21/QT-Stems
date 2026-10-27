@@ -38,6 +38,13 @@ Open `http://localhost:5500/practice-cover-app-v7.html`.
 
 Pick GPU in the app only if CUDA-enabled PyTorch is installed (`python -c "import torch; print(torch.cuda.is_available())"`).
 
+### Start automatically at login (Windows)
+`run-servers.ps1` keeps both servers running and restarts them if they stop. Register it once in PowerShell:
+```powershell
+Register-ScheduledTask -TaskName QuickTuneServers -User $env:USERNAME -RunLevel Limited -Action (New-ScheduledTaskAction -Execute powershell.exe -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\path\to\QT-Stems\run-servers.ps1"') -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME) -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable)
+```
+Remove it with `Unregister-ScheduledTask QuickTuneServers`. Set `QT_PYTHON` to your python.exe if it is not on PATH.
+
 ## How it works
 - The app uploads a song, then polls `/api/jobs/<id>` for real separation progress (Demucs runs in a background thread, one job at a time).
 - Stems are saved as 256 kbps MP3 and downloaded fully to the device before the practice controls unlock, so mute/solo/seek are instant and stems stay in sync.
