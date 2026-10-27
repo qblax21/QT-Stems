@@ -21,6 +21,7 @@
     .stemList{display:flex;flex-direction:column;gap:.7rem}.stem{display:grid;grid-template-columns:84px 1fr auto;gap:.7rem;align-items:center}.stemName{font-weight:700}.stemSub{font-size:.74rem;color:var(--muted)} .stemGain{display:flex;align-items:center;gap:.4rem}.stemGain input{width:100%;accent-color:var(--primary)} .miniControls{display:flex;gap:.35rem}.miniControls button{padding:.5rem .62rem;border-radius:10px;background:var(--offset);font-size:.74rem;font-weight:700}.miniControls .solo.active{background:rgba(232,175,52,.18);color:var(--warning)} .miniControls .mute.active{background:rgba(221,105,116,.18);color:var(--error)} .miniControls .cover.active{background:rgba(109,170,69,.18);color:var(--success)}
     .jobList{display:flex;flex-direction:column;gap:.45rem}.job{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;padding:.8rem .9rem;border-radius:14px;background:var(--offset)}.dot{width:10px;height:10px;border-radius:999px;background:var(--faint)}.job.done .dot{background:var(--success)}.job.live .dot{background:var(--primary)}.job.wait .dot{background:var(--warning)}
     .note{padding:.8rem;border-radius:14px;background:var(--offset);color:var(--muted);font-size:.86rem}.sessionCard .tags{display:flex;gap:.45rem;flex-wrap:wrap}.tag{padding:.35rem .55rem;border-radius:999px;background:var(--offset);font-size:.74rem} .footerNav{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;padding:.75rem;border-top:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .footerNav button{padding:.7rem .25rem;border-radius:12px;font-size:.76rem;font-weight:700;color:var(--muted)} .footerNav button.active{background:var(--soft);color:var(--primary)} .good{color:var(--success)} .warn{color:var(--warning)}
+    button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
   </style>
 </head>
 <body>
@@ -95,21 +96,29 @@ function backendBase(){return document.getElementById('backendBase').value.repla
 function renderPipeline(active=-1){const host=document.getElementById('jobList'); host.innerHTML=''; pipeline.forEach((step,i)=>{const d=document.createElement('div'); const cls=i<active?'done':i===active?'live':(active>=0?'wait':''); d.className=`job ${cls}`.trim(); d.innerHTML=`<span class="dot"></span><span>${step}</span><span class="subtle">${i<active?'done':i===active?'running':'pending'}</span>`; host.appendChild(d);});}
 function syncBackendSummary(){document.getElementById('backendSummary').textContent=`${selectedModel} on ${selectedDevice}. ${selectedDevice==='cpu'?'Best free path, slowest option.':'Faster if your machine has CUDA.'}`; document.getElementById('settingsModel').textContent=selectedModel; document.getElementById('settingsDevice').textContent=selectedDevice;}
 function updateLoopUI(){const dur=masterAudio.duration||0; const a=loopA*dur,b=Math.max(loopB*dur,a+.2); document.getElementById('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; document.getElementById('markerA').style.left=`${loopA*100}%`; document.getElementById('markerB').style.left=`${loopB*100}%`; drawWaveform();}
-function updatePlayhead(){const dur=masterAudio.duration||0; const p=dur?(masterAudio.currentTime/dur):0; document.getElementById('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; document.getElementById('timeNow').textContent=formatTime(masterAudio.currentTime); syncStemTimes();}
+function updatePlayhead(){const dur=masterAudio.duration||0; const p=dur?(masterAudio.currentTime/dur):0; document.getElementById('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; document.getElementById('timeNow').textContent=formatTime(masterAudio.currentTime);}
 function resizeCanvas(){const ratio=Math.max(1,window.devicePixelRatio||1), rect=waveCanvas.getBoundingClientRect(); waveCanvas.width=Math.floor(rect.width*ratio); waveCanvas.height=Math.floor(rect.height*ratio); ctx.setTransform(ratio,0,0,ratio,0,0); drawWaveform();}
 window.addEventListener('resize',resizeCanvas);
 function drawWaveform(){const w=waveCanvas.clientWidth,h=waveCanvas.clientHeight; ctx.clearRect(0,0,w,h); const grad=ctx.createLinearGradient(0,0,0,h); grad.addColorStop(0,'rgba(255,255,255,0.05)'); grad.addColorStop(1,'rgba(255,255,255,0.01)'); ctx.fillStyle=grad; ctx.fillRect(0,0,w,h); const loopStart=loopA*w, loopEnd=loopB*w; ctx.fillStyle='rgba(79,152,163,0.12)'; ctx.fillRect(loopStart,0,Math.max(0,loopEnd-loopStart),h); const bars=120, bw=w/bars, mid=h/2; const samples=waveformData||Array.from({length:bars},(_,i)=>.14+.56*Math.abs(Math.sin(i*.22))); for(let i=0;i<bars;i++){const x=i*bw; const v=samples[Math.floor(i*(samples.length/bars))]||.1; const bh=Math.max(6,v*(h*.82)); ctx.fillStyle=(x>=loopStart&&x<=loopEnd)?'rgba(79,152,163,0.95)':'rgba(205,204,202,0.34)'; ctx.fillRect(x,mid-bh/2,Math.max(2,bw-2),bh);}}
 let waveformJob=0;
 async function buildWaveformFromFile(file){const job=++waveformJob; const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent); if(isMobile||file.size>25*1024*1024){waveformData=null; drawWaveform(); return;} try{const arrayBuffer=await file.arrayBuffer(); const AC=window.AudioContext||window.webkitAudioContext; const temp=new AC(); const decoded=await temp.decodeAudioData(arrayBuffer.slice(0)); const raw=decoded.getChannelData(0); const samples=600; const block=Math.floor(raw.length/samples)||1; const filtered=[]; for(let i=0;i<samples;i++){let sum=0; const start=i*block, end=Math.min(raw.length,start+block); for(let j=start;j<end;j++) sum+=Math.abs(raw[j]); filtered.push(sum/Math.max(1,end-start));} const max=Math.max(...filtered,.001); temp.close(); if(job!==waveformJob) return; waveformData=filtered.map(v=>v/max); drawWaveform();}catch(e){waveformData=null; drawWaveform();}}
 function pointerToRatio(clientX){const rect=waveWrap.getBoundingClientRect(); return Math.min(1,Math.max(0,(clientX-rect.left)/rect.width));}
-function ensureAudioCtx(){if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();}
-function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); document.getElementById('modeStatus').textContent=`${name} muted`; renderStemList(); updateMix();}
+const stemGains={};
+function ensureAudioCtx(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext; if(AC) audioCtx=new AC({latencyHint:'playback'});} return audioCtx;}
+function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); document.getElementById('modeStatus').textContent=`${name} muted`; document.querySelectorAll('#stemList [data-cover]').forEach(b=>b.classList.toggle('active',b.dataset.cover===name)); updateMix();}
 function stemKeys(){return Object.keys(stemState)}
 function getTransportSource(){const available=stemKeys().find(k=>stemState[k].url); return available||'Other'}
-function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'hydrated stem':'no URL yet'}</div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; renderStemList(); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; renderStemList(); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
-function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; stemAudioEls[name]=el; return el;}
-function syncStemTimes(){for(const el of Object.values(stemAudioEls)){if(Math.abs(el.currentTime-masterAudio.currentTime)>0.12) el.currentTime=masterAudio.currentTime;}}
-function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} el.volume=vol; el.playbackRate=speed;}}
+function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'hydrated stem':'no URL yet'}</div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
+function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; el.preservesPitch=true; el.webkitPreservesPitch=true; stemAudioEls[name]=el;
+  // Route through a GainNode: volume changes are instant and also work on iOS (where element.volume is read-only).
+  const ac=ensureAudioCtx(); if(ac){try{const src=ac.createMediaElementSource(el); const g=ac.createGain(); src.connect(g); g.connect(ac.destination); stemGains[name]=g;}catch(e){}}
+  return el;}
+function activeStemEls(){return Object.entries(stemState).filter(([,s])=>s.url).map(([n])=>stemAudioEls[n]).filter(Boolean)}
+function seekAll(t){const dur=masterAudio.duration||0; t=Math.max(0,dur?Math.min(t,dur-0.05):t); masterAudio.currentTime=t; for(const el of activeStemEls()) el.currentTime=t; updatePlayhead();}
+function waitReady(el){return new Promise(res=>{if(el.readyState>=3) return res(); const done=()=>{el.removeEventListener('canplay',done); res();}; el.addEventListener('canplay',done); setTimeout(done,5000);});}
+// Keep every stem locked to masterAudio. Small drift is trimmed by nudging playbackRate (no audible glitch); big drift is re-seeked.
+function syncStemTimes(hard){const t=masterAudio.currentTime; for(const el of activeStemEls()){if(el.seeking) continue; const d=el.currentTime-t; if(masterAudio.paused){if(Math.abs(d)>0.01) el.currentTime=t; continue;} if(Math.abs(d)>(hard?0.05:0.25)){el.currentTime=t; el.playbackRate=speed;} else if(Math.abs(d)>0.02){el.playbackRate=speed*(1-Math.max(-0.05,Math.min(0.05,d*0.5)));} else if(el.playbackRate!==speed) el.playbackRate=speed;}}
+function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} const g=stemGains[name]; if(g&&audioCtx) g.gain.setTargetAtTime(vol,audioCtx.currentTime,0.01); else el.volume=vol;}}
 async function playAll() {
   ensureAudioCtx();
   await audioCtx.resume();
@@ -126,33 +135,34 @@ async function playAll() {
 
   masterAudio.muted = true;
   masterAudio.volume = 0;
-
-  if (masterAudio.src) {
-    try {
-      if (masterAudio.paused) await masterAudio.play();
-    } catch (e) {}
-  }
-
-  for (const [name] of active) {
-    const el = ensureStemAudio(name);
-    el.currentTime = masterAudio.currentTime || 0;
-    el.playbackRate = speed;
-  }
-
-  await Promise.all(
-    active.map(async ([name]) => {
-      const el = ensureStemAudio(name);
-      try {
-        await el.play();
-      } catch (e) {}
-    })
-  );
-
   updateMix();
+
+  // Align every stem to the clock, wait until all are buffered, then start them together.
+  const t = masterAudio.currentTime || 0;
+  const els = active.map(([name]) => ensureStemAudio(name));
+  for (const el of els) { el.currentTime = t; el.playbackRate = speed; }
+  await Promise.all(els.map(waitReady));
+  const starts = els.map(el => el.play().catch(() => {}));
+  if (masterAudio.src) starts.push(masterAudio.play().catch(() => {}));
+  await Promise.all(starts);
+  syncStemTimes(true); // snap away any start-up offset between the clock and the stems
 }
 function pauseAll() {
   for (const el of Object.values(stemAudioEls)) el.pause();
   masterAudio.pause();
+  syncStemTimes();
+}
+let clockUrl = null;
+function silentWavUrl(seconds) {
+  const rate = 8000, n = Math.max(1, Math.ceil(seconds * rate));
+  const buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  str(36, "data"); v.setUint32(40, n, true);
+  new Uint8Array(buf, 44).fill(128);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
 }
 function setStemUrls(outputs) {
   const base = backendBase();
@@ -205,25 +215,32 @@ function setStemUrls(outputs) {
     setTarget(fallbackTarget);
   }
 
-  const masterUrl = map[fallbackTarget];
-  if (masterUrl) {
+  // masterAudio is only the transport clock. Instead of streaming a duplicate stem (which eats one of the browser's
+  // ~6 connections per host and delays loading), give it a tiny silent WAV of the same length.
+  if (map[fallbackTarget]) {
     const wasPaused = masterAudio.paused;
     const oldTime = masterAudio.currentTime || 0;
-
+    const clockEl = stemAudioEls[fallbackTarget];
     masterAudio.pause();
-    masterAudio.src = masterUrl;
-    masterAudio.muted = true;
-    masterAudio.volume = 0;
-    masterAudio.load();
 
-    masterAudio.addEventListener("loadedmetadata", () => {
-      try {
-        masterAudio.currentTime = Math.min(oldTime, Math.max(0, (masterAudio.duration || 0) - 0.05));
-      } catch (e) {}
-      syncStemTimes();
-      updatePlayhead();
-      if (!wasPaused) playAll();
-    }, { once: true });
+    const armClock = () => {
+      if (clockUrl) URL.revokeObjectURL(clockUrl);
+      clockUrl = silentWavUrl(clockEl.duration);
+      masterAudio.src = clockUrl;
+      masterAudio.muted = true;
+      masterAudio.volume = 0;
+      masterAudio.addEventListener("loadedmetadata", () => {
+        try {
+          masterAudio.currentTime = Math.min(oldTime, Math.max(0, (masterAudio.duration || 0) - 0.05));
+        } catch (e) {}
+        syncStemTimes();
+        updatePlayhead();
+        if (!wasPaused) playAll();
+      }, { once: true });
+      masterAudio.load();
+    };
+    if (clockEl.readyState >= 1) armClock();
+    else clockEl.addEventListener("loadedmetadata", armClock, { once: true });
   }
 
   renderStemList();
@@ -257,15 +274,20 @@ function exportJson(name,data){const blob=new Blob([JSON.stringify(data,null,2)]
 function saveSession(){const dur=masterAudio.duration||0; const data={title:`${fileName} — ${selectedTarget} Cover`,model:selectedModel,device:selectedDevice,target:selectedTarget,loop:{a:loopA,b:loopB,display:`${formatTime(loopA*dur)}–${formatTime(loopB*dur)}`},speed:`${Math.round(speed*100)}%`,stems:Object.fromEntries(Object.entries(stemState).map(([k,v])=>[k,v.url])),notes:document.getElementById('notes').value.trim(),when:'just now'}; sessions.unshift(data); renderSessions(); showScreen('sessions');}
 function renderSessions(){const host=document.getElementById('sessionsList'); host.innerHTML=''; if(!sessions.length){const e=document.createElement('div'); e.className='card note'; e.textContent='No saved sessions yet.'; host.appendChild(e); return;} sessions.forEach((s,i)=>{const card=document.createElement('div'); card.className='card stack sessionCard'; card.innerHTML=`<div class="row"><strong>${s.title}</strong><span class="subtle">${s.when}</span></div><div class="tags"><span class="tag">${s.model}</span><span class="tag">${s.device}</span><span class="tag">${s.speed}</span><span class="tag">${s.loop.display}</span></div><div class="note">${s.notes||'No notes added.'}</div><div class="persistGrid"><button class="primary" data-resume="${i}">Resume</button><button class="secondary" data-export="${i}">Export</button></div>`; host.appendChild(card);}); host.querySelectorAll('[data-export]').forEach(b=>b.addEventListener('click',e=>exportJson('practice-session.json',sessions[Number(e.currentTarget.dataset.export)]))); host.querySelectorAll('[data-resume]').forEach(b=>b.addEventListener('click',()=>showScreen('practice')));}
 masterAudio.addEventListener('loadedmetadata',()=>{document.getElementById('timeDur').textContent=formatTime(masterAudio.duration); updateLoopUI(); updatePlayhead();});
-masterAudio.addEventListener('timeupdate',()=>{updatePlayhead(); const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){masterAudio.currentTime=a; for(const el of Object.values(stemAudioEls)) el.currentTime=a; loopReps+=1; document.getElementById('repsCount').textContent=`${loopReps}x`;}});
-masterAudio.addEventListener('pause',()=>document.getElementById('playBtn').textContent='▶'); masterAudio.addEventListener('play',()=>document.getElementById('playBtn').textContent='❚❚');
+// Playhead, loop wrap and stem sync run on one animation-frame loop (timeupdate only fires ~4x/second).
+let rafId=0, lastSync=0;
+function tick(ts){rafId=0; if(masterAudio.paused) return; updatePlayhead(); const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){seekAll(a); loopReps+=1; document.getElementById('repsCount').textContent=`${loopReps}x`;} else if(ts-lastSync>200){syncStemTimes(); lastSync=ts;} rafId=requestAnimationFrame(tick);}
+function startTick(){if(!rafId) rafId=requestAnimationFrame(tick);}
+masterAudio.addEventListener('timeupdate',()=>{if(masterAudio.paused) updatePlayhead();});
+masterAudio.addEventListener('pause',()=>{document.getElementById('playBtn').textContent='▶'; for(const el of Object.values(stemAudioEls)) el.pause();}); masterAudio.addEventListener('play',()=>{document.getElementById('playBtn').textContent='❚❚'; startTick();});
+masterAudio.addEventListener('ended',()=>pauseAll());
 document.getElementById('audioFile').addEventListener('change',async e=>{const file=e.target.files?.[0]; if(file){fileName=file.name.replace(/\.[^/.]+$/,''); document.getElementById('songTitle').textContent=fileName; if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted = false;
 masterAudio.volume = 1; masterAudio.load(); buildWaveformFromFile(file).catch(()=>{});}});
 document.querySelectorAll('#modelGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedModel=btn.dataset.model; document.querySelectorAll('#modelGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
 document.querySelectorAll('#deviceGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedDevice=btn.dataset.device; document.querySelectorAll('#deviceGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
 document.getElementById('runDemucsBtn').addEventListener('click',runDemucs); document.getElementById('demoHydrateBtn').addEventListener('click',()=>{setStemUrls({vocals:'https://cdn.example.com/vocals.mp3',drums:'https://cdn.example.com/drums.mp3',bass:'https://cdn.example.com/bass.mp3',other:'https://cdn.example.com/other.mp3',guitar:'https://cdn.example.com/guitar.mp3',piano:'https://cdn.example.com/piano.mp3'}); showScreen('practice');}); document.getElementById('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); document.getElementById('checkHealthBtn').addEventListener('click',checkHealth);
 document.getElementById('playBtn').addEventListener('click',async ()=>{if(masterAudio.paused){await playAll(); if(masterAudio.src && !masterAudio.paused){} else if(masterAudio.src){try{await masterAudio.play()}catch(e){}}} else pauseAll();});
-document.getElementById('back5').addEventListener('click',()=>{masterAudio.currentTime=Math.max(0,masterAudio.currentTime-5); syncStemTimes();}); document.getElementById('fwd5').addEventListener('click',()=>{masterAudio.currentTime=Math.min(masterAudio.duration||0,masterAudio.currentTime+5); syncStemTimes();}); document.getElementById('toA').addEventListener('click',()=>{masterAudio.currentTime=loopA*(masterAudio.duration||0); syncStemTimes();}); document.getElementById('toB').addEventListener('click',()=>{masterAudio.currentTime=loopB*(masterAudio.duration||0); syncStemTimes();});
+document.getElementById('back5').addEventListener('click',()=>seekAll(masterAudio.currentTime-5)); document.getElementById('fwd5').addEventListener('click',()=>seekAll(masterAudio.currentTime+5)); document.getElementById('toA').addEventListener('click',()=>seekAll(loopA*(masterAudio.duration||0))); document.getElementById('toB').addEventListener('click',()=>seekAll(loopB*(masterAudio.duration||0)));
 document.getElementById('setA').addEventListener('click',()=>{if(!masterAudio.duration)return; loopA=Math.min(loopB-.01,Math.max(0,masterAudio.currentTime/masterAudio.duration)); updateLoopUI();}); document.getElementById('setB').addEventListener('click',()=>{if(!masterAudio.duration)return; loopB=Math.max(loopA+.01,Math.min(1,masterAudio.currentTime/masterAudio.duration)); updateLoopUI();}); document.getElementById('loopToggle').addEventListener('click',e=>{loopEnabled=!loopEnabled; e.currentTarget.textContent=loopEnabled?'Loop On':'Loop Off'});
 document.getElementById('speedDown').addEventListener('click',()=>{speed=Math.max(.5,Math.round((speed-.05)*100)/100); masterAudio.playbackRate=speed; for(const el of Object.values(stemAudioEls)) el.playbackRate=speed; document.getElementById('speedValue').textContent=`${Math.round(speed*100)}%`; document.getElementById('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;});
 document.getElementById('speedUp').addEventListener('click',()=>{speed=Math.min(1.5,Math.round((speed+.05)*100)/100); masterAudio.playbackRate=speed; for(const el of Object.values(stemAudioEls)) el.playbackRate=speed; document.getElementById('speedValue').textContent=`${Math.round(speed*100)}%`; document.getElementById('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;});
@@ -273,7 +295,12 @@ document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.addEventListener
 document.getElementById('coverToggle').addEventListener('click',()=>{coverMode=!coverMode; const knob=document.querySelector('#coverToggle span'); document.getElementById('coverToggle').style.background=coverMode?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; knob.style.transform=coverMode?'translateX(24px)':'translateX(0)'; updateMix();});
 document.getElementById('saveSessionBtn').addEventListener('click',saveSession); document.getElementById('viewSessionsBtn').addEventListener('click',()=>showScreen('sessions')); document.getElementById('exportCurrentBtn').addEventListener('click',()=>exportJson('current-practice-session.json',{model:selectedModel,device:selectedDevice,target:selectedTarget,notes:document.getElementById('notes').value.trim()})); document.getElementById('exportAllBtn').addEventListener('click',()=>exportJson('practice-session-pack.json',{sessions})); document.getElementById('importPack').addEventListener('change',async e=>{const f=e.target.files?.[0]; if(!f) return; try{const parsed=JSON.parse(await f.text()); sessions=Array.isArray(parsed.sessions)?[...parsed.sessions,...sessions]:[parsed,...sessions]; renderSessions(); showScreen('sessions');}catch{}});
 document.getElementById('themeBtn').addEventListener('click',()=>{const root=document.documentElement; root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark'); setTimeout(drawWaveform,30);});
-waveCanvas.addEventListener('click',e=>{if(!masterAudio.duration) return; masterAudio.currentTime=pointerToRatio(e.clientX)*masterAudio.duration; syncStemTimes(); updatePlayhead();}); document.getElementById('markerA').addEventListener('pointerdown',e=>{dragMode='A'; e.currentTarget.setPointerCapture(e.pointerId)}); document.getElementById('markerB').addEventListener('pointerdown',e=>{dragMode='B'; e.currentTarget.setPointerCapture(e.pointerId)}); waveWrap.addEventListener('pointermove',e=>{if(!dragMode) return; const ratio=pointerToRatio(e.clientX); if(dragMode==='A') loopA=Math.min(loopB-.01,ratio); if(dragMode==='B') loopB=Math.max(loopA+.01,ratio); updateLoopUI();}); waveWrap.addEventListener('pointerup',()=>dragMode=null); waveWrap.addEventListener('pointerleave',()=>dragMode=null);
+// Drag anywhere on the waveform to scrub; seeks are throttled while dragging and exact on release.
+let scrubbing=false, lastScrubSeek=0;
+const scrubTo=(e,force)=>{if(!masterAudio.duration) return; const now=performance.now(); const ratio=pointerToRatio(e.clientX); document.getElementById('playhead').style.left=`${ratio*100}%`; document.getElementById('timeNow').textContent=formatTime(ratio*masterAudio.duration); if(force||now-lastScrubSeek>90){lastScrubSeek=now; seekAll(ratio*masterAudio.duration);}};
+waveCanvas.addEventListener('pointerdown',e=>{if(!masterAudio.duration) return; scrubbing=true; waveCanvas.setPointerCapture(e.pointerId); scrubTo(e,true);});
+waveCanvas.addEventListener('pointermove',e=>{if(scrubbing) scrubTo(e,false);});
+waveCanvas.addEventListener('pointerup',e=>{if(!scrubbing) return; scrubbing=false; scrubTo(e,true);}); waveCanvas.addEventListener('pointercancel',()=>{scrubbing=false;}); document.getElementById('markerA').addEventListener('pointerdown',e=>{dragMode='A'; e.currentTarget.setPointerCapture(e.pointerId)}); document.getElementById('markerB').addEventListener('pointerdown',e=>{dragMode='B'; e.currentTarget.setPointerCapture(e.pointerId)}); waveWrap.addEventListener('pointermove',e=>{if(!dragMode) return; const ratio=pointerToRatio(e.clientX); if(dragMode==='A') loopA=Math.min(loopB-.01,ratio); if(dragMode==='B') loopB=Math.max(loopA+.01,ratio); updateLoopUI();}); waveWrap.addEventListener('pointerup',()=>dragMode=null); waveWrap.addEventListener('pointerleave',()=>dragMode=null);
 if(location.protocol.startsWith('http')&&!['localhost','127.0.0.1',''].includes(location.hostname)) document.getElementById('backendBase').value=`http://${location.hostname}:8000`;
 renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar');
 </script>
