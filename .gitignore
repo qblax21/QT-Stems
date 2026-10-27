@@ -7,3 +7,4 @@ last_error.txt
 backend_log.txt
 *.log
 .claude/
+web_log.txt
