@@ -75,7 +75,7 @@
     <div class="row"><strong>Target part</strong><button class="toggle" id="coverToggle"><span></span></button></div>
     <div class="grid3" id="targetGrid"><button class="pill active">Guitar</button><button class="pill">Bass</button><button class="pill">Drums</button><button class="pill">Vocals</button><button class="pill">Piano</button><button class="pill">Other</button></div>
   </div>
-  <div class="card stack"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">real stems when hydrated</span></div><div class="stemList" id="stemList"></div></div>
+  <div class="card stack"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">real stems when hydrated</span></div><div class="subtle" id="diag" style="font-size:.7rem"></div><div class="stemList" id="stemList"></div></div>
   <div class="grid2"><button class="secondary" id="speedDown">- Speed</button><button class="secondary" id="speedUp">+ Speed</button></div>
   <div class="note" id="speedValue" style="text-align:center">100%</div>
   <div class="card stack"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
@@ -118,7 +118,7 @@ function setTarget(name){selectedTarget=name; document.querySelectorAll('#target
 function stemKeys(){return Object.keys(stemState)}
 function getTransportSource(){const available=stemKeys().find(k=>stemState[k].url); return available||'Other'}
 function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
-function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; el.preservesPitch=true; el.webkitPreservesPitch=true; stemAudioEls[name]=el;
+function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; el.preservesPitch=true; el.webkitPreservesPitch=true; el.addEventListener('waiting',()=>diag.stalls++); stemAudioEls[name]=el;
   // Route through a GainNode: volume changes are instant and also work on iOS (where element.volume is read-only).
   // iOS Safari glitches when several media elements feed Web Audio, so there we use el.muted instead of gain nodes.
   const ac=USE_GRAPH?ensureAudioCtx():null; if(ac){try{const src=ac.createMediaElementSource(el); const g=ac.createGain(); src.connect(g); g.connect(ac.destination); stemGains[name]=g;}catch(e){}}
@@ -130,7 +130,15 @@ function waitReady(el){return new Promise(res=>{if(el.readyState>=3) return res(
 // Only re-seek on real drift, and at most once per 1.5s per stem: phones report media currentTime coarsely, and
 // nudging playbackRate or re-seeking on every small difference makes playback choppy.
 const lastFix=new WeakMap();
-function syncStemTimes(hard){const t=masterAudio.currentTime, now=performance.now(); for(const el of activeStemEls()){if(el.seeking) continue; const d=el.currentTime-t; if(masterAudio.paused){if(Math.abs(d)>0.01) el.currentTime=t; continue;} if(el.playbackRate!==speed) el.playbackRate=speed; if(Math.abs(d)>(hard?0.1:0.2) && now-(lastFix.get(el)||0)>1500){el.currentTime=t; lastFix.set(el,now);}}}
+const diag={fixes:0,stalls:0,masterRetries:0,maxDrift:0}; let userPaused=true;
+// While playing, the audible stems follow the first stem (stem-to-stem drift is accurate; a seek lands ~0.1s late, so aim slightly ahead).
+// The silent clock (masterAudio) follows the stems, never the other way round, so a laggy clock can't cause audible re-seeks.
+function syncStemTimes(hard){const els=activeStemEls(); if(!els.length) return; const now=performance.now();
+  if(masterAudio.paused){const t=masterAudio.currentTime; for(const el of els){if(!el.seeking&&Math.abs(el.currentTime-t)>0.01) el.currentTime=t;} return;}
+  const ref=els[0]; let worst=0;
+  for(const el of els){if(el.playbackRate!==speed) el.playbackRate=speed; if(el===ref||el.seeking) continue; const d=el.currentTime-ref.currentTime; worst=Math.max(worst,Math.abs(d)); if(Math.abs(d)>0.12&&now-(lastFix.get(el)||0)>3000){el.currentTime=ref.currentTime+0.08; lastFix.set(el,now); diag.fixes++;}}
+  diag.maxDrift=Math.max(diag.maxDrift*0.9,worst);
+  if(!masterAudio.seeking&&Math.abs(masterAudio.currentTime-ref.currentTime)>0.15) masterAudio.currentTime=ref.currentTime;}
 function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} const g=stemGains[name]; if(g&&audioCtx) g.gain.setTargetAtTime(vol,audioCtx.currentTime,0.01); else {el.muted=vol===0; el.volume=vol;}}}
 async function playAll() {
   if (USE_GRAPH) { const ac = ensureAudioCtx(); if (ac) await ac.resume(); }
@@ -145,6 +153,7 @@ async function playAll() {
     return;
   }
 
+  userPaused = false;
   masterAudio.muted = true;
   masterAudio.volume = 0;
   updateMix();
@@ -160,6 +169,7 @@ async function playAll() {
   syncStemTimes(true);
 }
 function pauseAll() {
+  userPaused = true;
   for (const el of Object.values(stemAudioEls)) el.pause();
   masterAudio.pause();
   syncStemTimes();
@@ -303,6 +313,7 @@ function setStemUrls(outputs) {
     const wasPaused = masterAudio.paused;
     const oldTime = masterAudio.currentTime || 0;
     const clockEl = stemAudioEls[fallbackTarget];
+    userPaused = true;
     masterAudio.pause();
 
     const armClock = () => {
@@ -368,10 +379,10 @@ function renderSessions(){const host=document.getElementById('sessionsList'); ho
 masterAudio.addEventListener('loadedmetadata',()=>{document.getElementById('timeDur').textContent=formatTime(masterAudio.duration); updateLoopUI(); updatePlayhead();});
 // Playhead, loop wrap and stem sync run on one animation-frame loop (timeupdate only fires ~4x/second).
 let rafId=0, lastSync=0;
-function tick(ts){rafId=0; if(masterAudio.paused) return; updatePlayhead(); const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){seekAll(a); loopReps+=1; document.getElementById('repsCount').textContent=`${loopReps}x`;} else if(ts-lastSync>200){syncStemTimes(); lastSync=ts;} rafId=requestAnimationFrame(tick);}
+function tick(ts){rafId=0; if(masterAudio.paused) return; updatePlayhead(); const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){seekAll(a); loopReps+=1; document.getElementById('repsCount').textContent=`${loopReps}x`;} else if(ts-lastSync>250){syncStemTimes(); lastSync=ts; document.getElementById('diag').textContent=`sync: ${diag.fixes} corrections · ${diag.stalls} stalls · ${diag.masterRetries} clock restarts · drift ${Math.round(diag.maxDrift*1000)}ms · ${USE_GRAPH?'graph':'muted'}`;} rafId=requestAnimationFrame(tick);}
 function startTick(){if(!rafId) rafId=requestAnimationFrame(tick);}
 masterAudio.addEventListener('timeupdate',()=>{if(masterAudio.paused) updatePlayhead();});
-masterAudio.addEventListener('pause',()=>{document.getElementById('playBtn').textContent='▶'; for(const el of Object.values(stemAudioEls)) el.pause();}); masterAudio.addEventListener('play',()=>{document.getElementById('playBtn').textContent='❚❚'; startTick();});
+masterAudio.addEventListener('pause',()=>{if(!userPaused&&!masterAudio.ended){diag.masterRetries++; masterAudio.play().catch(()=>{}); return;} document.getElementById('playBtn').textContent='▶'; for(const el of Object.values(stemAudioEls)) el.pause();}); masterAudio.addEventListener('play',()=>{document.getElementById('playBtn').textContent='❚❚'; startTick();});
 masterAudio.addEventListener('ended',()=>pauseAll());
 document.getElementById('audioFile').addEventListener('change',async e=>{const file=e.target.files?.[0]; if(file){fileName=file.name.replace(/\.[^/.]+$/,''); document.getElementById('songTitle').textContent=fileName; if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted = false;
 masterAudio.volume = 1; masterAudio.load(); buildWaveformFromFile(file).catch(()=>{});}});
