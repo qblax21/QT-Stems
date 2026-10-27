@@ -21,6 +21,10 @@
     .stemList{display:flex;flex-direction:column;gap:.7rem}.stem{display:grid;grid-template-columns:84px 1fr auto;gap:.7rem;align-items:center}.stemName{font-weight:700}.stemSub{font-size:.74rem;color:var(--muted)} .stemGain{display:flex;align-items:center;gap:.4rem}.stemGain input{width:100%;accent-color:var(--primary)} .miniControls{display:flex;gap:.35rem}.miniControls button{padding:.5rem .62rem;border-radius:10px;background:var(--offset);font-size:.74rem;font-weight:700}.miniControls .solo.active{background:rgba(232,175,52,.18);color:var(--warning)} .miniControls .mute.active{background:rgba(221,105,116,.18);color:var(--error)} .miniControls .cover.active{background:rgba(109,170,69,.18);color:var(--success)}
     .jobList{display:flex;flex-direction:column;gap:.45rem}.job{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;padding:.8rem .9rem;border-radius:14px;background:var(--offset)}.dot{width:10px;height:10px;border-radius:999px;background:var(--faint)}.job.done .dot{background:var(--success)}.job.live .dot{background:var(--primary)}.job.wait .dot{background:var(--warning)}
     .note{padding:.8rem;border-radius:14px;background:var(--offset);color:var(--muted);font-size:.86rem}.sessionCard .tags{display:flex;gap:.45rem;flex-wrap:wrap}.tag{padding:.35rem .55rem;border-radius:999px;background:var(--offset);font-size:.74rem} .footerNav{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;padding:.75rem;border-top:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .footerNav button{padding:.7rem .25rem;border-radius:12px;font-size:.76rem;font-weight:700;color:var(--muted)} .footerNav button.active{background:var(--soft);color:var(--primary)} .good{color:var(--success)} .warn{color:var(--warning)}
+    .bar{height:6px;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--primary);border-radius:999px;transition:width .25s ease}.job.done .bar i{background:var(--success)}.jobBody{display:flex;flex-direction:column;gap:.4rem;min-width:0;font-size:.9rem}.job.indet .bar i{width:40%!important;animation:qtslide 1.1s ease-in-out infinite alternate}@keyframes qtslide{from{margin-left:0}to{margin-left:60%}}
+    .ring{--p:0;flex:none;width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p)*1%),var(--offset) 0);display:grid;place-items:center;position:relative}.ring:before{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--surface2)}.ring span{position:relative;font-size:.72rem;font-weight:700}.titleRow{display:flex;align-items:center;gap:.7rem}
+    .mbar{height:3px;margin-top:.3rem;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.mbar i{display:block;height:100%;width:0;background:var(--primary);transition:width .25s ease}
+    body.hydrating #practiceScreen>:not(.hydrate):not(:first-child){filter:grayscale(1);opacity:.4;pointer-events:none;transition:filter .3s,opacity .3s} #practiceScreen>*{transition:filter .3s,opacity .3s}
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
   </style>
 </head>
@@ -42,7 +46,7 @@
     <div class="persistGrid"><button class="primary" id="runDemucsBtn">Run Demucs</button><button class="secondary" id="demoHydrateBtn">Demo Stems</button></div>
   </div>
   <div class="card stack">
-    <div class="row"><strong>Separation job</strong><span class="subtle" id="jobStatusBadge">waiting</span></div>
+    <div class="row"><div class="titleRow"><div class="ring" id="overallRing"><span id="overallRingText">0%</span></div><strong>Separation job</strong></div><span class="subtle" id="jobStatusBadge">waiting</span></div>
     <div class="jobList" id="jobList"></div>
     <div class="note" id="jobNote">This version expects your own backend to receive the file, run Demucs, save stems, and return their URLs.</div>
   </div>
@@ -59,6 +63,7 @@
 </section>
 <section class="screen hidden" id="practiceScreen">
   <div class="row"><div><h2 id="songTitle" style="font-size:1.35rem;line-height:1.1">No song loaded</h2><p id="songMeta" class="subtle">Hydrate stems from your backend.</p></div><div class="badge" id="modeStatus">Guitar muted</div></div>
+  <div class="card stack hydrate hidden" id="hydrateBanner"><div class="row"><strong id="hydrateTitle">Loading stems…</strong><span class="subtle" id="hydratePct">0%</span></div><div class="bar"><i id="hydrateBar"></i></div><div class="note" id="hydrateNote">Controls unlock once every stem is on this device, so playback stays in sync.</div><button class="secondary hidden" id="hydrateRetry">Retry failed stems</button></div>
   <div class="meta"><div class="chip"><strong id="timeNow">0:00</strong><span>Now</span></div><div class="chip"><strong id="timeDur">0:00</strong><span>Length</span></div><div class="chip"><strong id="repsCount">0x</strong><span>Loop reps</span></div></div>
   <div class="card stack">
     <div class="row"><span id="loopLabel" class="subtle">Loop 0:00 → 0:00</span><span id="rateLabel" class="subtle">Speed 100%</span></div>
@@ -86,14 +91,17 @@ const screens={import:document.getElementById('importScreen'),practice:document.
 const navButtons=[...document.querySelectorAll('.footerNav button')];
 const masterAudio=document.getElementById('masterAudio');
 const waveCanvas=document.getElementById('waveCanvas'); const waveWrap=document.getElementById('waveWrap'); const ctx=waveCanvas.getContext('2d');
-const pipeline=['Receive file','Queue separation','Run Demucs model','Write stems to disk','Return public URLs','Hydrate player'];
+const steps=[{label:'Upload song',w:5},{label:'Wait in queue',w:2},{label:'Split into stems (Demucs)',w:55},{label:'Encode & save stems',w:10},{label:'Download stems to this device',w:28}]; const stepPct=steps.map(()=>0), stepIndet=steps.map(()=>false); let stepActive=-1;
 const stemDefaults={Vocals:{volume:78,mute:false,solo:false,url:''},Drums:{volume:72,mute:false,solo:false,url:''},Bass:{volume:72,mute:false,solo:false,url:''},Guitar:{volume:78,mute:false,solo:false,url:''},Piano:{volume:64,mute:false,solo:false,url:''},Other:{volume:78,mute:false,solo:false,url:''}};
 let selectedModel='htdemucs', selectedDevice='cpu', selectedTarget='Guitar', coverMode=true, loopEnabled=true, speed=1, loopA=0, loopB=1, loopReps=0, dragMode=null, waveformData=null, sessions=[]; let fileName='No song loaded'; let objectUrl=null; let audioCtx; const stemState=structuredClone(stemDefaults); const stemAudioEls={};
 function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name));}
 navButtons.forEach(btn=>btn.addEventListener('click',()=>showScreen(btn.dataset.screen)));
 function formatTime(sec){if(!isFinite(sec)) return '0:00'; const m=Math.floor(sec/60), s=Math.floor(sec%60).toString().padStart(2,'0'); return `${m}:${s}`}
 function backendBase(){return document.getElementById('backendBase').value.replace(/\/$/,'')}
-function renderPipeline(active=-1){const host=document.getElementById('jobList'); host.innerHTML=''; pipeline.forEach((step,i)=>{const d=document.createElement('div'); const cls=i<active?'done':i===active?'live':(active>=0?'wait':''); d.className=`job ${cls}`.trim(); d.innerHTML=`<span class="dot"></span><span>${step}</span><span class="subtle">${i<active?'done':i===active?'running':'pending'}</span>`; host.appendChild(d);});}
+function renderPipeline(reset){const host=document.getElementById('jobList'); if(reset){stepPct.fill(0); stepIndet.fill(false); stepActive=-1;}
+  if(host.children.length!==steps.length){host.innerHTML=''; steps.forEach(s=>{const d=document.createElement('div'); d.className='job'; d.innerHTML=`<span class="dot"></span><div class="jobBody"><span>${s.label}</span><div class="bar"><i></i></div></div><span class="subtle jobPct">pending</span>`; host.appendChild(d);});}
+  let total=0; steps.forEach((s,i)=>{const d=host.children[i]; const p=Math.max(0,Math.min(100,stepPct[i])); const done=p>=100; const live=!done&&i===stepActive; const indet=live&&stepIndet[i]; d.className=`job ${done?'done':live?'live':(stepActive>=0?'wait':'')}${indet?' indet':''}`.trim(); d.querySelector('.bar i').style.width=(indet?100:p)+'%'; d.querySelector('.jobPct').textContent=done?'done':live?(indet?'working…':Math.round(p)+'%'):'pending'; total+=s.w*p/100;});
+  const overall=Math.round(total/steps.reduce((a,s)=>a+s.w,0)*100); document.getElementById('overallRing').style.setProperty('--p',overall); document.getElementById('overallRingText').textContent=overall+'%';}
 function syncBackendSummary(){document.getElementById('backendSummary').textContent=`${selectedModel} on ${selectedDevice}. ${selectedDevice==='cpu'?'Best free path, slowest option.':'Faster if your machine has CUDA.'}`; document.getElementById('settingsModel').textContent=selectedModel; document.getElementById('settingsDevice').textContent=selectedDevice;}
 function updateLoopUI(){const dur=masterAudio.duration||0; const a=loopA*dur,b=Math.max(loopB*dur,a+.2); document.getElementById('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; document.getElementById('markerA').style.left=`${loopA*100}%`; document.getElementById('markerB').style.left=`${loopB*100}%`; drawWaveform();}
 function updatePlayhead(){const dur=masterAudio.duration||0; const p=dur?(masterAudio.currentTime/dur):0; document.getElementById('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; document.getElementById('timeNow').textContent=formatTime(masterAudio.currentTime);}
@@ -108,7 +116,7 @@ function ensureAudioCtx(){if(!audioCtx){const AC=window.AudioContext||window.web
 function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); document.getElementById('modeStatus').textContent=`${name} muted`; document.querySelectorAll('#stemList [data-cover]').forEach(b=>b.classList.toggle('active',b.dataset.cover===name)); updateMix();}
 function stemKeys(){return Object.keys(stemState)}
 function getTransportSource(){const available=stemKeys().find(k=>stemState[k].url); return available||'Other'}
-function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'hydrated stem':'no URL yet'}</div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
+function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
 function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; el.preservesPitch=true; el.webkitPreservesPitch=true; stemAudioEls[name]=el;
   // Route through a GainNode: volume changes are instant and also work on iOS (where element.volume is read-only).
   const ac=ensureAudioCtx(); if(ac){try{const src=ac.createMediaElementSource(el); const g=ac.createGain(); src.connect(g); g.connect(ac.destination); stemGains[name]=g;}catch(e){}}
@@ -152,6 +160,83 @@ function pauseAll() {
   masterAudio.pause();
   syncStemTimes();
 }
+// Stems are downloaded fully into memory (Blob URLs) before playback. That gives real download progress,
+// instant seeking and no network stalls, which were the cause of laggy controls and drifting stems.
+let hydrateGen = 0, clockReady = false;
+const hydr = {}, stemBlobUrls = {};
+function startHydration(map) {
+  const gen = ++hydrateGen;
+  for (const k of Object.keys(hydr)) delete hydr[k];
+  for (const [name, url] of Object.entries(map)) {
+    if (stemBlobUrls[name]) { URL.revokeObjectURL(stemBlobUrls[name]); delete stemBlobUrls[name]; }
+    const el = ensureStemAudio(name);
+    el.removeAttribute("src"); el.load();
+    if (!url) continue;
+    hydr[name] = { loaded: 0, total: 0, done: false, error: null, url };
+    loadStem(name, gen);
+  }
+  updateHydrationUI();
+}
+let hydrateTick = 0;
+async function loadStem(name, gen) {
+  const h = hydr[name];
+  h.error = null;
+  try {
+    const res = await fetch(h.url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    h.total = Number(res.headers.get("Content-Length")) || 0;
+    h.loaded = 0;
+    const reader = res.body.getReader(), chunks = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (gen !== hydrateGen) { reader.cancel(); return; }
+      if (done) break;
+      chunks.push(value); h.loaded += value.length;
+      const now = performance.now();
+      if (now - hydrateTick > 120) { hydrateTick = now; updateHydrationUI(); }
+    }
+    const blob = new Blob(chunks, { type: res.headers.get("Content-Type") || "audio/mpeg" });
+    const bu = URL.createObjectURL(blob);
+    stemBlobUrls[name] = bu;
+    const el = stemAudioEls[name];
+    el.addEventListener("loadedmetadata", updateHydrationUI, { once: true });
+    el.src = bu; el.load();
+    h.done = true;
+  } catch (e) {
+    if (gen === hydrateGen) h.error = e.message || "failed";
+  }
+  updateHydrationUI();
+}
+function updateHydrationUI() {
+  const names = Object.keys(hydr), banner = document.getElementById("hydrateBanner");
+  if (!names.length) { document.body.classList.remove("hydrating"); banner.classList.add("hidden"); return; }
+  let sum = 0; const failed = [];
+  names.forEach(n => {
+    const h = hydr[n];
+    const p = h.done ? 100 : (h.total ? Math.min(99, h.loaded / h.total * 100) : 0);
+    sum += p;
+    if (h.error) failed.push(n);
+    const row = document.querySelector(`[data-stemrow="${n}"]`);
+    if (row) { row.querySelector(".mbar i").style.width = p + "%"; row.querySelector(".stemSub").textContent = h.error ? "failed" : h.done ? "ready" : Math.round(p) + "%"; }
+  });
+  const avg = sum / names.length;
+  const ready = !failed.length && clockReady && names.every(n => hydr[n].done && stemAudioEls[n].readyState >= 1);
+  document.body.classList.toggle("hydrating", !ready);
+  banner.classList.toggle("hidden", ready);
+  document.getElementById("hydrateTitle").textContent = failed.length ? "Some stems failed to load" : avg >= 100 ? "Preparing playback…" : "Loading stems…";
+  document.getElementById("hydratePct").textContent = Math.round(avg) + "%";
+  document.getElementById("hydrateBar").style.width = avg + "%";
+  document.getElementById("hydrateRetry").classList.toggle("hidden", !failed.length);
+  document.getElementById("hydrateNote").textContent = failed.length ? `Failed: ${failed.join(", ")} (${hydr[failed[0]].error}).` : "Controls unlock once every stem is on this device, so playback stays in sync.";
+  if (stepActive === 4) {
+    stepPct[4] = ready ? 100 : Math.min(99, avg); renderPipeline();
+    if (ready) { document.getElementById("jobStatusBadge").textContent = "done"; document.getElementById("jobNote").textContent = "Ready. Stems are on this device."; }
+  }
+}
+document.getElementById("hydrateRetry").addEventListener("click", () => {
+  for (const n of Object.keys(hydr)) if (hydr[n].error) loadStem(n, hydrateGen);
+  updateHydrationUI();
+});
 let clockUrl = null;
 function silentWavUrl(seconds) {
   const rate = 8000, n = Math.max(1, Math.ceil(seconds * rate));
@@ -183,17 +268,9 @@ function setStemUrls(outputs) {
     Other: absolutize(outputs.other || outputs.instrumental || "")
   };
 
-  Object.entries(map).forEach(([name, url]) => {
-    stemState[name].url = url || "";
-    const el = ensureStemAudio(name);
-    if (url) {
-      el.src = url;
-      el.load();
-    } else {
-      el.removeAttribute("src");
-      el.load();
-    }
-  });
+  Object.entries(map).forEach(([name, url]) => { stemState[name].url = url || ""; });
+  clockReady = false;
+  startHydration(map);
 
   document.getElementById("vocalsUrl").value = map.Vocals;
   document.getElementById("drumsUrl").value = map.Drums;
@@ -235,6 +312,8 @@ function setStemUrls(outputs) {
         } catch (e) {}
         syncStemTimes();
         updatePlayhead();
+        clockReady = true;
+        updateHydrationUI();
         if (!wasPaused) playAll();
       }, { once: true });
       masterAudio.load();
@@ -245,29 +324,38 @@ function setStemUrls(outputs) {
 
   renderStemList();
   updateMix();
+  updateHydrationUI();
   document.getElementById("mixSummary").textContent = "real stems when hydrated";
 }
 async function checkHealth(){try{const res=await fetch(`${backendBase()}/api/health`); const data=await res.json(); document.getElementById('backendHealthText').textContent=data.status==='ok'?`ok · ${data.device}`:'unavailable'; document.getElementById('backendHealthText').className='subtle good';}catch{document.getElementById('backendHealthText').textContent='backend unreachable'; document.getElementById('backendHealthText').className='subtle warn';}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function uploadWithProgress(url,form,onProgress){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest(); x.open('POST',url); x.upload.onprogress=e=>{if(e.lengthComputable) onProgress(e.loaded/e.total*100);}; x.onload=()=>{let data={}; try{data=JSON.parse(x.responseText);}catch{} if(x.status>=200&&x.status<300) resolve(data); else reject(new Error(data.detail||data.error||`Upload failed (HTTP ${x.status})`));}; x.onerror=()=>reject(new Error('Failed to fetch')); x.send(form);});}
+// Poll the backend job until it finishes; each backend stage maps onto one progress row.
+async function pollJob(base,jobId){let fails=0; for(;;){let j; try{const r=await fetch(`${base}/api/jobs/${jobId}`); if(!r.ok){const d=await r.json().catch(()=>({})); const e=new Error(d.detail||`HTTP ${r.status}`); e.fatal=r.status===404; throw e;} j=await r.json(); fails=0;}catch(e){if(e.fatal||++fails>30) throw e; await sleep(1500); continue;}
+    stepPct[0]=100;
+    if(j.status==='queued'){stepActive=1; stepIndet[1]=true; stepPct[1]=0;}
+    else{stepIndet[1]=false; stepPct[1]=100; if(j.stage==='separate'){stepActive=2; stepPct[2]=j.percent||0;} else {stepPct[2]=100; stepActive=3; stepIndet[3]=true; stepPct[3]=0;}}
+    renderPipeline();
+    if(j.status==='done') return j; if(j.status==='error') throw new Error(j.error||'Separation failed');
+    await sleep(600);}}
 async function runDemucs(){const file=document.getElementById('audioFile').files?.[0]; if(!file){alert('Choose an audio file first.'); return;}
-  const btn=document.getElementById('runDemucsBtn'); const note=document.getElementById('jobNote'); btn.disabled=true;
+  const btn=document.getElementById('runDemucsBtn'); const note=document.getElementById('jobNote'); const badge=document.getElementById('jobStatusBadge'); btn.disabled=true;
   try{
-    renderPipeline(0); document.getElementById('jobStatusBadge').textContent='running'; note.textContent=`Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)... separation can take a few minutes.`;
+    renderPipeline(true); stepActive=0; renderPipeline(); badge.textContent='uploading'; note.textContent=`Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)...`;
     fileName=file.name.replace(/\.[^/.]+$/,''); document.getElementById('songTitle').textContent=fileName; document.getElementById('songMeta').textContent=`Demucs ${selectedModel} · ${selectedDevice}`;
     if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted=false; masterAudio.volume=1; masterAudio.load();
     buildWaveformFromFile(file).catch(()=>{});
     const form=new FormData(); form.append('file',file); form.append('model',selectedModel); form.append('device',selectedDevice);
-    renderPipeline(2);
-    const res=await fetch(`${backendBase()}/api/demucs/separate`,{method:'POST',body:form});
-    let data={}; try{data=await res.json();}catch{}
-    if(!res.ok) throw new Error(data.detail||data.error||`Separation failed (HTTP ${res.status})`);
-    for(let i=3;i<pipeline.length;i++){renderPipeline(i); await new Promise(r=>setTimeout(r,220));}
-    setStemUrls(data.outputs||{});
-    document.getElementById('jobStatusBadge').textContent='done';
-    document.getElementById('jobNote').textContent=`Completed with ${data.model || selectedModel} on ${data.device || selectedDevice}.`;
+    const base=backendBase();
+    const start=await uploadWithProgress(`${base}/api/demucs/separate`,form,p=>{stepPct[0]=p; renderPipeline();});
+    badge.textContent='separating'; note.textContent='Splitting stems on your PC...';
+    const job=await pollJob(base,start.job_id);
+    stepPct[3]=100; stepIndet[3]=false; stepActive=4; renderPipeline(); badge.textContent='downloading'; note.textContent='Downloading stems to this device. Practice controls unlock when they are all here.';
+    setStemUrls(job.outputs||{});
     showScreen('practice');
   }catch(err){
-    document.getElementById('jobStatusBadge').textContent='failed';
-    document.getElementById('jobNote').textContent=(err.message==='Failed to fetch'||err.name==='TypeError')?`Could not reach backend at ${backendBase()} (check the address and that the server is running).`:(err.message||'Could not reach backend.');
+    badge.textContent='failed';
+    note.textContent=(err.message==='Failed to fetch'||err.name==='TypeError')?`Could not reach backend at ${backendBase()} (check the address and that the server is running).`:(err.message||'Could not reach backend.');
   }finally{btn.disabled=false;}
 }
 function exportJson(name,data){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),800);}

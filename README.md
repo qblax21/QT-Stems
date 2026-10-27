@@ -38,6 +38,10 @@ Open `http://localhost:5500/practice-cover-app-v7.html`.
 
 Pick GPU in the app only if CUDA-enabled PyTorch is installed (`python -c "import torch; print(torch.cuda.is_available())"`).
 
+## How it works
+- The app uploads a song, then polls `/api/jobs/<id>` for real separation progress (Demucs runs in a background thread, one job at a time).
+- Stems are saved as 256 kbps MP3 and downloaded fully to the device before the practice controls unlock, so mute/solo/seek are instant and stems stay in sync.
+
 ## Security note
 This is a local/LAN tool. There is no authentication, upload limit or job queue, and `python -m http.server` serves the whole folder. Do not expose it to the public internet as-is. Separated stems are saved under `stems/`.
 
