@@ -112,6 +112,7 @@ let waveformJob=0;
 async function buildWaveformFromFile(file){const job=++waveformJob; const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent); if(isMobile||file.size>25*1024*1024){waveformData=null; drawWaveform(); return;} try{const arrayBuffer=await file.arrayBuffer(); const AC=window.AudioContext||window.webkitAudioContext; const temp=new AC(); const decoded=await temp.decodeAudioData(arrayBuffer.slice(0)); const raw=decoded.getChannelData(0); const samples=600; const block=Math.floor(raw.length/samples)||1; const filtered=[]; for(let i=0;i<samples;i++){let sum=0; const start=i*block, end=Math.min(raw.length,start+block); for(let j=start;j<end;j++) sum+=Math.abs(raw[j]); filtered.push(sum/Math.max(1,end-start));} const max=Math.max(...filtered,.001); temp.close(); if(job!==waveformJob) return; waveformData=filtered.map(v=>v/max); drawWaveform();}catch(e){waveformData=null; drawWaveform();}}
 function pointerToRatio(clientX){const rect=waveWrap.getBoundingClientRect(); return Math.min(1,Math.max(0,(clientX-rect.left)/rect.width));}
 const stemGains={};
+const USE_GRAPH=!(/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
 function ensureAudioCtx(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext; if(AC) audioCtx=new AC({latencyHint:'playback'});} return audioCtx;}
 function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); document.getElementById('modeStatus').textContent=`${name} muted`; document.querySelectorAll('#stemList [data-cover]').forEach(b=>b.classList.toggle('active',b.dataset.cover===name)); updateMix();}
 function stemKeys(){return Object.keys(stemState)}
@@ -119,17 +120,20 @@ function getTransportSource(){const available=stemKeys().find(k=>stemState[k].ur
 function renderStemList(){const host=document.getElementById('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
 function ensureStemAudio(name){if(stemAudioEls[name]) return stemAudioEls[name]; const el=new Audio(); el.crossOrigin='anonymous'; el.preload='auto'; el.loop=false; el.preservesPitch=true; el.webkitPreservesPitch=true; stemAudioEls[name]=el;
   // Route through a GainNode: volume changes are instant and also work on iOS (where element.volume is read-only).
-  const ac=ensureAudioCtx(); if(ac){try{const src=ac.createMediaElementSource(el); const g=ac.createGain(); src.connect(g); g.connect(ac.destination); stemGains[name]=g;}catch(e){}}
+  // iOS Safari glitches when several media elements feed Web Audio, so there we use el.muted instead of gain nodes.
+  const ac=USE_GRAPH?ensureAudioCtx():null; if(ac){try{const src=ac.createMediaElementSource(el); const g=ac.createGain(); src.connect(g); g.connect(ac.destination); stemGains[name]=g;}catch(e){}}
   return el;}
 function activeStemEls(){return Object.entries(stemState).filter(([,s])=>s.url).map(([n])=>stemAudioEls[n]).filter(Boolean)}
 function seekAll(t){const dur=masterAudio.duration||0; t=Math.max(0,dur?Math.min(t,dur-0.05):t); masterAudio.currentTime=t; for(const el of activeStemEls()) el.currentTime=t; updatePlayhead();}
 function waitReady(el){return new Promise(res=>{if(el.readyState>=3) return res(); const done=()=>{el.removeEventListener('canplay',done); res();}; el.addEventListener('canplay',done); setTimeout(done,5000);});}
 // Keep every stem locked to masterAudio. Small drift is trimmed by nudging playbackRate (no audible glitch); big drift is re-seeked.
-function syncStemTimes(hard){const t=masterAudio.currentTime; for(const el of activeStemEls()){if(el.seeking) continue; const d=el.currentTime-t; if(masterAudio.paused){if(Math.abs(d)>0.01) el.currentTime=t; continue;} if(Math.abs(d)>(hard?0.05:0.25)){el.currentTime=t; el.playbackRate=speed;} else if(Math.abs(d)>0.02){el.playbackRate=speed*(1-Math.max(-0.05,Math.min(0.05,d*0.5)));} else if(el.playbackRate!==speed) el.playbackRate=speed;}}
-function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} const g=stemGains[name]; if(g&&audioCtx) g.gain.setTargetAtTime(vol,audioCtx.currentTime,0.01); else el.volume=vol;}}
+// Only re-seek on real drift, and at most once per 1.5s per stem: phones report media currentTime coarsely, and
+// nudging playbackRate or re-seeking on every small difference makes playback choppy.
+const lastFix=new WeakMap();
+function syncStemTimes(hard){const t=masterAudio.currentTime, now=performance.now(); for(const el of activeStemEls()){if(el.seeking) continue; const d=el.currentTime-t; if(masterAudio.paused){if(Math.abs(d)>0.01) el.currentTime=t; continue;} if(el.playbackRate!==speed) el.playbackRate=speed; if(Math.abs(d)>(hard?0.1:0.2) && now-(lastFix.get(el)||0)>1500){el.currentTime=t; lastFix.set(el,now);}}}
+function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); for(const [name,s] of Object.entries(stemState)){const el=stemAudioEls[name]; if(!el) continue; let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode && name===selectedTarget) vol=0;} const g=stemGains[name]; if(g&&audioCtx) g.gain.setTargetAtTime(vol,audioCtx.currentTime,0.01); else {el.muted=vol===0; el.volume=vol;}}}
 async function playAll() {
-  ensureAudioCtx();
-  await audioCtx.resume();
+  if (USE_GRAPH) { const ac = ensureAudioCtx(); if (ac) await ac.resume(); }
 
   const active = Object.entries(stemState).filter(([, s]) => s.url);
   if (!active.length) {
@@ -153,7 +157,7 @@ async function playAll() {
   const starts = els.map(el => el.play().catch(() => {}));
   if (masterAudio.src) starts.push(masterAudio.play().catch(() => {}));
   await Promise.all(starts);
-  syncStemTimes(true); // snap away any start-up offset between the clock and the stems
+  syncStemTimes(true);
 }
 function pauseAll() {
   for (const el of Object.values(stemAudioEls)) el.pause();
@@ -224,6 +228,7 @@ function updateHydrationUI() {
   document.body.classList.toggle("hydrating", !ready);
   banner.classList.toggle("hidden", ready);
   document.getElementById("hydrateTitle").textContent = failed.length ? "Some stems failed to load" : avg >= 100 ? "Preparing playback…" : "Loading stems…";
+  document.getElementById("mixSummary").textContent = ready ? `all ${names.length} stems loaded ✓` : `loading ${Math.round(avg)}%`;
   document.getElementById("hydratePct").textContent = Math.round(avg) + "%";
   document.getElementById("hydrateBar").style.width = avg + "%";
   document.getElementById("hydrateRetry").classList.toggle("hidden", !failed.length);
@@ -325,7 +330,6 @@ function setStemUrls(outputs) {
   renderStemList();
   updateMix();
   updateHydrationUI();
-  document.getElementById("mixSummary").textContent = "real stems when hydrated";
 }
 async function checkHealth(){try{const res=await fetch(`${backendBase()}/api/health`); const data=await res.json(); document.getElementById('backendHealthText').textContent=data.status==='ok'?`ok · ${data.device}`:'unavailable'; document.getElementById('backendHealthText').className='subtle good';}catch{document.getElementById('backendHealthText').textContent='backend unreachable'; document.getElementById('backendHealthText').className='subtle warn';}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
