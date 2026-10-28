@@ -47,7 +47,8 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Set `QT_PYTHON` to y
 
 ## How it works
 - The app uploads a song, then polls `/api/jobs/<id>` for real separation progress (Demucs runs in a background thread, one job at a time).
-- Stems are saved as 256 kbps MP3 and downloaded fully to the device before the practice controls unlock, so mute/solo/seek are instant and stems stay in sync.
+- Stems are saved as 256 kbps MP3 and downloaded fully to the device before the practice controls unlock.
+- Playback uses Web Audio: every stem is decoded in memory and mixed inside one AudioWorklet, so all stems share a single sample clock (no drift), mute/solo/seek are instant, and A/B loops wrap sample-accurately. Speed changes use WSOLA time-stretching, so pitch is preserved. Very long songs are decoded at a lower sample rate to stay within phone memory.
 
 ## Security note
 This is a local/LAN tool. There is no authentication, upload limit or job queue, and `python -m http.server` serves the whole folder. Do not expose it to the public internet as-is. Separated stems are saved under `stems/`.
