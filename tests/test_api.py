@@ -1,0 +1,148 @@
+"""Backend API tests. They never run Demucs: only request validation, the library, sessions, auth and export."""
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app as backend  # noqa: E402
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    stems, library = tmp_path / "stems", tmp_path / "library"
+    stems.mkdir(); library.mkdir()
+    monkeypatch.setattr(backend, "STEMS_DIR", stems)
+    monkeypatch.setattr(backend, "LIBRARY_DIR", library)
+    monkeypatch.setattr(backend, "SESSIONS_FILE", tmp_path / "sessions.json")
+    monkeypatch.setattr(backend, "PASSCODE", "")
+    monkeypatch.setattr(backend, "MAX_UPLOAD_MB", 500)
+    return TestClient(backend.app)
+
+
+def make_song(client, song_id="abc1234567", title="My Song", stems=("vocals", "bass")):
+    d = backend.STEMS_DIR / song_id
+    d.mkdir()
+    for s in stems:
+        (d / f"{s}.mp3").write_bytes(b"x" * 100)
+    (d / "meta.json").write_text(json.dumps({"title": title, "model": "htdemucs", "created": 1000}))
+    (backend.LIBRARY_DIR / f"{song_id}.mp3").write_bytes(b"y" * 50)
+    return song_id
+
+
+def upload(client, **form):
+    return client.post("/api/demucs/separate", files={"file": ("a.mp3", b"abc", "audio/mpeg")}, data=form)
+
+
+# ---- health / auth -------------------------------------------------------------------------------------------
+
+def test_health_is_public_and_reports_auth(client, monkeypatch):
+    assert client.get("/api/health").json()["auth"] is False
+    monkeypatch.setattr(backend, "PASSCODE", "secret")
+    r = client.get("/api/health")
+    assert r.status_code == 200 and r.json()["auth"] is True
+
+
+def test_passcode_blocks_api_until_supplied(client, monkeypatch):
+    monkeypatch.setattr(backend, "PASSCODE", "secret")
+    assert client.get("/api/library").status_code == 401
+    assert client.get("/api/library", headers={"X-QT-Key": "wrong"}).status_code == 401
+    assert client.get("/api/library", headers={"X-QT-Key": "secret"}).status_code == 200
+    assert client.options("/api/library", headers={"Origin": "http://x", "Access-Control-Request-Method": "GET"}).status_code == 200
+
+
+def test_upload_size_limit(client, monkeypatch):
+    monkeypatch.setattr(backend, "MAX_UPLOAD_MB", 0)
+    assert upload(client, model="htdemucs", device="cpu").status_code == 413
+
+
+# ---- separation request validation ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("form,code", [
+    ({"model": "nope", "device": "cpu"}, 400),
+    ({"model": "htdemucs", "device": "tpu"}, 400),
+    ({"model": "htdemucs", "device": "cpu", "stem": "kazoo"}, 400),
+    ({"model": "htdemucs", "device": "cpu", "stem": "piano"}, 400),  # piano needs the 6-stem model
+])
+def test_separate_rejects_bad_requests(client, form, code):
+    assert upload(client, **form).status_code == code
+
+
+# ---- library -------------------------------------------------------------------------------------------------
+
+def test_library_lists_songs_with_sizes(client):
+    make_song(client)
+    data = client.get("/api/library").json()
+    assert [s["title"] for s in data["songs"]] == ["My Song"]
+    song = data["songs"][0]
+    assert set(song["outputs"]) == {"vocals", "bass"} and song["hasOriginal"] is True
+    assert song["bytes"] >= 250 and data["total_bytes"] == sum(s["bytes"] for s in data["songs"])
+
+
+def test_untitled_song_gets_a_default_name_and_can_be_renamed(client):
+    d = backend.STEMS_DIR / "ffff000011"; d.mkdir(); (d / "drums.mp3").write_bytes(b"x")
+    assert client.get("/api/library").json()["songs"][0]["title"] == "Untitled song"
+    assert client.patch("/api/library/ffff000011", json={"title": "  Dragon "}).json()["title"] == "Dragon"
+    assert client.get("/api/library").json()["songs"][0]["title"] == "Dragon"
+    assert client.patch("/api/library/ffff000011", json={"title": " "}).status_code == 400
+    assert client.patch("/api/library/0000000000", json={"title": "x"}).status_code == 404
+
+
+def test_delete_one_and_many_and_ignore_bad_ids(client):
+    a, b = make_song(client, "aaaaaaaaaa"), make_song(client, "bbbbbbbbbb")
+    assert client.delete(f"/api/library/{a}").json() == {"deleted": a}
+    assert not (backend.STEMS_DIR / a).exists() and not list(backend.LIBRARY_DIR.glob(a + ".*"))
+    assert client.delete("/api/library/not-an-id").status_code == 400
+    r = client.post("/api/library/delete", json={"ids": [b, "../x", 5]})
+    assert r.json()["deleted"] == [b]
+    assert client.get("/api/library").json()["songs"] == []
+    assert client.post("/api/library/delete", json={"ids": "all"}).status_code == 400
+
+
+# ---- sessions ------------------------------------------------------------------------------------------------
+
+def test_sessions_round_trip_with_tombstones(client):
+    assert client.get("/api/sessions").json() == {"sessions": [], "deleted": []}
+    payload = {"sessions": [{"id": "s1", "title": "x"}], "deleted": ["old"]}
+    assert client.put("/api/sessions", json=payload).json() == {"saved": 1}
+    assert client.get("/api/sessions").json() == payload
+    assert client.put("/api/sessions", json={"sessions": "nope"}).status_code == 400
+
+
+# ---- export --------------------------------------------------------------------------------------------------
+
+def test_export_validation(client):
+    song = make_song(client)
+    assert client.post("/api/export", json={"song_id": "0000000000", "gains": {}}).status_code == 404
+    assert client.post("/api/export", json={"song_id": song, "gains": {"vocals": 0}}).status_code == 400
+    assert client.post("/api/export", json={"song_id": song, "gains": {"vocals": "loud"}}).status_code == 400
+
+
+def test_tempo_chain_stays_inside_atempo_limits():
+    for t in (0.25, 0.5, 0.9, 1.0, 1.7, 3.0):
+        stages = [float(p.split("=")[1]) for p in backend._tempo_chain(t).split(",")]
+        assert all(0.5 <= s <= 2.0 for s in stages)
+        product = 1.0
+        for s in stages:
+            product *= s
+        assert product == pytest.approx(t, rel=1e-3)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_export_renders_an_mp3_with_the_requested_speed(client, tmp_path):
+    song = make_song(client, stems=())
+    d = backend.STEMS_DIR / song
+    for name in ("vocals", "bass"):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+                        "-b:a", "128k", str(d / f"{name}.mp3")], check=True)
+    r = client.post("/api/export", json={"song_id": song, "gains": {"vocals": 0.8, "bass": 0.5}, "speed": 0.5})
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+    out = tmp_path / "mix.mp3"; out.write_bytes(r.content)
+    if shutil.which("ffprobe"):
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(out)],
+                                   capture_output=True, text=True).stdout)
+        assert 3.5 < dur < 4.6  # 2 s at half speed is about 4 s

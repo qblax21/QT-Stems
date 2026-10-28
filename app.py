@@ -441,7 +441,9 @@ def export_mix(payload: dict):
     if abs(pitch - 1) > 1e-6 or abs(speed - 1) > 1e-6:
         chain += f",asetrate={sr * pitch:.2f},aresample={sr},{_tempo_chain(speed / pitch)}"
     chain += ",alimiter=limit=0.95[out]"
-    out = Path(tempfile.mkstemp(prefix="quicktune_mix_", suffix=".mp3")[1])
+    fd, out_name = tempfile.mkstemp(prefix="quicktune_mix_", suffix=".mp3")
+    os.close(fd)  # keep the file but release the handle, or Windows can't delete it afterwards
+    out = Path(out_name)
     cmd = [ffmpeg, "-y", "-v", "error"]
     for p, _ in files:
         cmd += ["-i", str(p)]

@@ -1,0 +1,14 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # The tests never run Demucs, so PyTorch and Demucs are not installed here.
+      - run: pip install fastapi uvicorn python-multipart pytest httpx
+      - run: pytest -q tests
