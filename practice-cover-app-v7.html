@@ -513,9 +513,9 @@ function renderLibrary(){
   list.forEach(s=>{
     const card=mk('div','card stack sessionCard'), row=mk('div','row'); row.append(mk('strong',null,s.title),mk('span','subtle',new Date(s.created*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
     const tags=mk('div','tags'); [s.model,s.stem&&`just ${s.stem}`,s.hasOriginal&&'original saved'].filter(Boolean).forEach(t=>tags.appendChild(mk('span','tag',t)));
-    const grid=mk('div','persistGrid three'); const open=mk('button','primary','Practice'), ren=mk('button','secondary','Rename'), del=mk('button','tertiary','Delete');
+    const grid=mk('div','persistGrid three'); const prev=LS.get('qt.songs',{})[s.id]; const open=mk('button','primary',prev?'Practice again':'Practice'), ren=mk('button','secondary','Rename'), del=mk('button','tertiary','Delete');
     ren.addEventListener('click',async()=>{const t=prompt('Song name',s.title==='Untitled song'?'':s.title); if(!t||!t.trim()) return; try{await fetch(`${backendBase()}/api/library/${s.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t.trim()})});}catch{} loadLibrary();});
-    open.addEventListener('click',()=>restoreSnapshot({fileName:s.title,model:s.model,target:s.stem?s.stem[0].toUpperCase()+s.stem.slice(1):undefined,outputs:s.outputs}));
+    open.addEventListener('click',()=>prev?restoreSnapshot({...prev,fileName:s.title,outputs:s.outputs}):restoreSnapshot({fileName:s.title,model:s.model,target:s.stem?s.stem[0].toUpperCase()+s.stem.slice(1):undefined,outputs:s.outputs}));
     del.addEventListener('click',async()=>{if(!confirm(`Delete "${s.title}" and its stems from your PC?`)) return; try{await fetch(`${backendBase()}/api/library/${s.id}`,{method:'DELETE'});}catch{} loadLibrary();});
     grid.append(open,ren,del); card.append(row,tags,grid); host.appendChild(card);});}
 $('libSearch').addEventListener('input',renderLibrary);
@@ -526,9 +526,10 @@ function renderSessions(){const host=$('sessionsList'); host.innerHTML=''; if(!s
     const grid=mk('div','persistGrid three'); const mkBtn=(cls,label,fn)=>{const b=mk('button',cls,label); b.addEventListener('click',fn); return b;};
     grid.append(mkBtn('primary','Resume',()=>restoreSnapshot(s)),mkBtn('secondary','Export',()=>exportJson('practice-session.json',s)),mkBtn('tertiary','Delete',()=>{if(confirm('Delete this saved session?')){if(s.id) deletedIds.push(s.id); sessions.splice(i,1); persistSessions(); renderSessions();}}));
     card.append(row,tags,mk('div','note',s.notes||'No notes added.'),grid); host.appendChild(card);});}
-// Remember the song being practiced so it can be picked up again after a reload.
+// Remember the song being practiced (and per song: loop, speed, mix, notes) so "Practice again" picks up where you were.
+const songKey=o=>{const u=Object.values(o||{})[0]||''; const m=/\/stems\/([0-9a-f]{10})\//.exec(u); return m?m[1]:'';};
 let lastSnap='';
-setInterval(()=>{const s=snapshot(); if(!s) return; s.savedAt=0; const j=JSON.stringify(s); if(j===lastSnap) return; lastSnap=j; s.savedAt=Date.now(); LS.set('qt.current',s);},2000);
+setInterval(()=>{const s=snapshot(); if(!s) return; s.savedAt=0; const j=JSON.stringify(s); if(j===lastSnap) return; lastSnap=j; s.savedAt=Date.now(); LS.set('qt.current',s); const k=songKey(s.outputs); if(k){const all=LS.get('qt.songs',{}); all[k]=s; LS.set('qt.songs',all);}},2000);
 function showResumeCard(){const s=LS.get('qt.current',null); if(!s||!s.outputs) return; $('resumeTitle').textContent=s.fileName||s.title||'Last song'; $('resumeWhen').textContent=s.savedAt?new Date(s.savedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''; $('resumeCard').classList.remove('hidden'); $('resumeBtn').onclick=()=>restoreSnapshot(s);}
 sessions=LS.get('qt.sessions',[]); if(!Array.isArray(sessions)) sessions=[]; renderSessions(); showResumeCard();
 
