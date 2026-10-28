@@ -36,6 +36,7 @@
     .mbar{height:3px;margin-top:.3rem;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.mbar i{display:block;height:100%;width:0;background:var(--primary);transition:width .25s ease}
     body.hydrating #practiceScreen>:not(.hydrate):not(:first-child){filter:grayscale(1);opacity:.4;pointer-events:none;transition:filter .3s,opacity .3s} #practiceScreen>*{transition:filter .3s,opacity .3s}
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
+    .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
     @media (max-width:540px){.app{padding:0}.phone{height:100dvh;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
     @media (display-mode:standalone) and (max-width:540px){.topbar{padding-top:calc(.2rem + max(env(safe-area-inset-top,0px),44px))}.footerNav{padding-bottom:calc(.1rem + max(env(safe-area-inset-bottom,0px),20px))}}
@@ -100,6 +101,7 @@
 <section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Settings</h1><p>The Demucs backend runs on your own computer.</p></div><div class="card stack"><div class="field"><label for="backendBase">Backend address</label><input id="backendBase" value="http://localhost:8000" /></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div></section>
 <nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="library">Library</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
 </section></main>
+<div id="lock" class="lock hidden"><div class="card stack"><strong>Passcode needed</strong><p class="subtle">Enter the passcode from <code>passcode.txt</code> on your PC.</p><input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode" /><div class="note hidden" id="lockErr"></div><button class="primary" id="lockBtn">Unlock</button></div></div>
 <audio id="masterAudio" crossorigin="anonymous"></audio>
 <script type="text/plain" id="qtWorklet">
 // Quick Tune player: mixes every stem inside one AudioWorklet so they share a single sample clock.
@@ -243,6 +245,18 @@ registerProcessor('qt-player', QTPlayer);
 </script>
 <script>
 const $=id=>document.getElementById(id);
+/* ---------- passcode (only if the PC has one set) ---------- */
+let apiKey=''; try{apiKey=localStorage.getItem('qt.key')||'';}catch{}
+const rawFetch=window.fetch.bind(window);
+const isBackend=u=>typeof u==='string'&&u.startsWith(backendBase());
+window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:(input&&input.url)||''; const mine=isBackend(url);
+  if(mine&&apiKey) init={...init,headers:{...(init.headers||{}),'X-QT-Key':apiKey}};
+  const res=await rawFetch(input,init); if(mine&&res.status===401) showLock(); return res;};
+function showLock(msg){$('lock').classList.remove('hidden'); $('lockErr').textContent=msg||''; $('lockErr').classList.toggle('hidden',!msg); setTimeout(()=>$('lockInput').focus(),50);}
+async function tryUnlock(){const key=$('lockInput').value.trim(); if(!key) return;
+  try{const r=await rawFetch(`${backendBase()}/api/auth-check`,{headers:{'X-QT-Key':key}}); if(r.status===401) return showLock('That passcode is not right.'); if(!r.ok) throw new Error();}
+  catch{return showLock('Could not reach your PC.');}
+  apiKey=key; try{localStorage.setItem('qt.key',key);}catch{} $('lock').classList.add('hidden'); $('lockInput').value=''; syncSessions(); if(!screens.library.classList.contains('hidden')) loadLibrary(); showResumeCard();}
 const screens={import:$('importScreen'),practice:$('practiceScreen'),library:$('libraryScreen'),sessions:$('sessionsScreen'),settings:$('settingsScreen')};
 const navButtons=[...document.querySelectorAll('.footerNav button')];
 const masterAudio=$('masterAudio'); // only used to preview the original upload before stems exist
@@ -433,7 +447,7 @@ function setStemUrls(outputs){
 /* ---------- backend ---------- */
 async function checkHealth(){try{const res=await fetch(`${backendBase()}/api/health`); const data=await res.json(); $('backendHealthText').textContent=data.status==='ok'?`ok · ${data.device}`:'unavailable'; $('backendHealthText').className='subtle good';}catch{$('backendHealthText').textContent='backend unreachable'; $('backendHealthText').className='subtle warn';}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function uploadWithProgress(url,form,onProgress){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest(); x.open('POST',url); x.upload.onprogress=e=>{if(e.lengthComputable) onProgress(e.loaded/e.total*100);}; x.onload=()=>{let data={}; try{data=JSON.parse(x.responseText);}catch{} if(x.status>=200&&x.status<300) resolve(data); else reject(new Error(data.detail||data.error||`Upload failed (HTTP ${x.status})`));}; x.onerror=()=>reject(new Error('Failed to fetch')); x.send(form);});}
+function uploadWithProgress(url,form,onProgress){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest(); x.open('POST',url); if(apiKey) x.setRequestHeader('X-QT-Key',apiKey); x.upload.onprogress=e=>{if(e.lengthComputable) onProgress(e.loaded/e.total*100);}; x.onload=()=>{let data={}; try{data=JSON.parse(x.responseText);}catch{} if(x.status===401) showLock(); if(x.status>=200&&x.status<300) resolve(data); else reject(new Error(data.detail||data.error||`Upload failed (HTTP ${x.status})`));}; x.onerror=()=>reject(new Error('Failed to fetch')); x.send(form);});}
 async function pollJob(base,jobId){let fails=0; for(;;){let j; try{const r=await fetch(`${base}/api/jobs/${jobId}`); if(!r.ok){const d=await r.json().catch(()=>({})); const e=new Error(d.detail||`HTTP ${r.status}`); e.fatal=r.status===404; throw e;} j=await r.json(); fails=0;}catch(e){if(e.fatal||++fails>30) throw e; await sleep(1500); continue;}
     stepPct[0]=100;
     if(j.status==='queued'){stepActive=1; stepIndet[1]=true; stepPct[1]=0;}
@@ -543,7 +557,7 @@ $('audioFile').addEventListener('change',e=>{const file=e.target.files?.[0]; if(
 /* ---------- controls ---------- */
 document.querySelectorAll('#modelGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedModel=btn.dataset.model; document.querySelectorAll('#modelGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
 document.querySelectorAll('#deviceGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedDevice=btn.dataset.device; document.querySelectorAll('#deviceGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
-$('runDemucsBtn').addEventListener('click',runDemucs); $('splitMode').addEventListener('change',syncBackendSummary); $('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); $('checkHealthBtn').addEventListener('click',checkHealth);
+$('lockBtn').addEventListener('click',tryUnlock); $('lockInput').addEventListener('keydown',e=>{if(e.key==='Enter') tryUnlock();}); $('runDemucsBtn').addEventListener('click',runDemucs); $('splitMode').addEventListener('change',syncBackendSummary); $('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); $('checkHealthBtn').addEventListener('click',checkHealth);
 $('playBtn').addEventListener('click',()=>{if(isPlaying()) transportPause(); else transportPlay();});
 $('back5').addEventListener('click',()=>transportSeek(curTime()-5)); $('fwd5').addEventListener('click',()=>transportSeek(curTime()+5)); $('toA').addEventListener('click',()=>transportSeek(loopA*curDur())); $('toB').addEventListener('click',()=>transportSeek(loopB*curDur()));
 $('setA').addEventListener('click',()=>{const d=curDur(); if(!d) return; loopA=Math.min(loopB-.01,Math.max(0,curTime()/d)); updateLoopUI();}); $('setB').addEventListener('click',()=>{const d=curDur(); if(!d) return; loopB=Math.max(loopA+.01,Math.min(1,curTime()/d)); updateLoopUI();}); $('loopToggle').addEventListener('click',e=>{loopEnabled=!loopEnabled; e.currentTarget.textContent=loopEnabled?'Loop On':'Loop Off'; engineLoop();});

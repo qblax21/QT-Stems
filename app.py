@@ -1,6 +1,9 @@
 from pathlib import Path
 from uuid import uuid4
+import asyncio
+import hmac
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -8,11 +11,46 @@ import threading
 import time
 import traceback
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, Request, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quick Tune Demucs Backend")
+
+
+def _load_passcode() -> str:
+    """Optional shared passcode: QT_PASSCODE env var, else the first line of passcode.txt. Empty = no lock."""
+    value = os.environ.get("QT_PASSCODE", "").strip()
+    if value:
+        return value
+    f = Path(__file__).resolve().parent / "passcode.txt"
+    try:
+        return f.read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+
+
+PASSCODE = _load_passcode()
+MAX_UPLOAD_MB = int(os.environ.get("QT_MAX_UPLOAD_MB", "500"))
+
+
+# Registered before CORS so CORS ends up outermost and 401 responses still reach the browser.
+@app.middleware("http")
+async def require_passcode(request: Request, call_next):
+    if PASSCODE and request.method != "OPTIONS" and request.url.path != "/api/health":
+        if not hmac.compare_digest(request.headers.get("x-qt-key", "").encode(), PASSCODE.encode()):
+            await asyncio.sleep(0.5)  # slow down guessing
+            return JSONResponse({"detail": "Passcode required"}, status_code=401)
+    try:
+        too_big = int(request.headers.get("content-length", "0")) > MAX_UPLOAD_MB * 1024 * 1024
+    except ValueError:
+        too_big = False
+    if too_big:
+        return JSONResponse({"detail": f"File is larger than {MAX_UPLOAD_MB} MB."}, status_code=413)
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -200,7 +238,12 @@ def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted"}
+    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted", "auth": bool(PASSCODE)}
+
+
+@app.get("/api/auth-check")
+def auth_check():
+    return {"ok": True}  # reaching this means the passcode (if any) was accepted
 
 
 @app.get("/api/last-error")
