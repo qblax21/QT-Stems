@@ -285,6 +285,27 @@ function pickFormat(dur,n){
   for(const [r,c] of [[44100,2],[32000,2],[24000,2],[22050,2],[32000,1],[22050,1]]) if(dur*r*4*c*n<=budget) return {rate:r,ch:c};
   return {rate:16000,ch:1};}
 function probeDuration(blob){return new Promise(res=>{const a=new Audio(), u=URL.createObjectURL(blob); const done=d=>{URL.revokeObjectURL(u); res(isFinite(d)?d:0);}; a.preload='metadata'; a.onloadedmetadata=()=>done(a.duration); a.onerror=()=>done(0); a.src=u; setTimeout(()=>done(0),5000);});}
+// AudioWorklet only exists on HTTPS or localhost pages. Over plain http:// (phone -> PC on your LAN/Tailscale) we run the exact
+// same player code through a ScriptProcessorNode instead: same mixing and time-stretch, just on the main thread.
+async function makePlayerNode(ac){
+  const src=$('qtWorklet').textContent;
+  if(ac.audioWorklet&&!location.search.includes('noworklet')){
+    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    await ac.audioWorklet.addModule(url); URL.revokeObjectURL(url);
+    const node=new AudioWorkletNode(ac,'qt-player',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
+    node.connect(ac.destination); engine.mode='audioworklet'; return node;
+  }
+  const procPort={onmessage:null,postMessage:m=>{if(nodePort.onmessage) nodePort.onmessage({data:m});}};
+  const nodePort={onmessage:null,postMessage:m=>{if(procPort.onmessage) procPort.onmessage({data:m});}};
+  let Cls=null;
+  class Base{constructor(){this.port=procPort;}}
+  new Function('AudioWorkletProcessor','registerProcessor','sampleRate',src+'\nreturn null;')(Base,(n,c)=>{Cls=c;},ac.sampleRate);
+  const proc=new Cls();
+  const sp=ac.createScriptProcessor(2048,1,2);
+  sp.onaudioprocess=e=>{const L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1); for(let i=0;i<L.length;i+=128){const l=L.subarray(i,i+128),r=R.subarray(i,i+128); l.fill(0); r.fill(0); proc.process([],[[l,r]]);}};
+  sp.connect(ac.destination); engine.mode='script-processor';
+  return {port:nodePort,disconnect(){try{sp.disconnect();}catch(e){} sp.onaudioprocess=null;},connect(){}};
+}
 async function prepareEngine(gen){
   const names=Object.keys(hydr); if(!names.length||engine.ready) return;
   engine.error=null; engine.decoded=0; updateHydrationUI();
@@ -292,10 +313,7 @@ async function prepareEngine(gen){
     let dur=await probeDuration(blobs[names[0]]); if(!dur) dur=blobs[names[0]].size*8/256000;
     const fmt=pickFormat(dur,names.length); engine.rate=fmt.rate; engine.ch=fmt.ch;
     let ac; try{ac=new (window.AudioContext||window.webkitAudioContext)({sampleRate:fmt.rate,latencyHint:'playback'});}catch(e){ac=new (window.AudioContext||window.webkitAudioContext)(); engine.rate=ac.sampleRate;}
-    const src=$('qtWorklet').textContent, url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
-    await ac.audioWorklet.addModule(url); URL.revokeObjectURL(url);
-    const node=new AudioWorkletNode(ac,'qt-player',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
-    node.connect(ac.destination);
+    const node=await makePlayerNode(ac);
     node.port.onmessage=e=>{const m=e.data; if(m.type==='pos'){engine.pos=m.t; engine.posAt=performance.now();} else if(m.type==='wrap'){loopReps++; $('repsCount').textContent=`${loopReps}x`;} else if(m.type==='ended'){engine.playing=false; engine.pos=engine.dur; setPlayLabel(false);}};
     if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
     engineReset(); engine.ac=ac; engine.node=node; engine.rate=ac.sampleRate; engine.error=null;
@@ -319,7 +337,7 @@ async function prepareEngine(gen){
     engine.ready=true; engine.pos=0; engine.posAt=performance.now();
     engine.post({type:'rate',r:speed}); updateMix(); engineLoop();
     $('timeDur').textContent=formatTime(engine.dur); updateLoopUI(); updatePlayhead();
-    $('diag').textContent=`player: Web Audio · ${(engine.rate/1000).toFixed(engine.rate%1000?1:0)} kHz ${fmt.ch===1?'mono':'stereo'} · ${names.length} stems · ~${Math.round(engine.dur*engine.rate*4*fmt.ch*names.length/1e6)} MB`;
+    $('diag').textContent=`player: ${engine.mode} ·${(engine.rate/1000).toFixed(engine.rate%1000?1:0)} kHz ${fmt.ch===1?'mono':'stereo'} · ${names.length} stems · ~${Math.round(engine.dur*engine.rate*4*fmt.ch*names.length/1e6)} MB`;
   }catch(e){engine.error=e&&e.message||String(e); console.error(e);}
   updateHydrationUI();}
 
