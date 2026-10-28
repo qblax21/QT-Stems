@@ -32,7 +32,7 @@
     .toggle{width:58px;height:34px;border-radius:999px;background:rgba(109,170,69,.24);padding:4px}.toggle span{display:block;width:26px;height:26px;border-radius:999px;background:var(--success);transform:translateX(24px)}
     .stemList{display:flex;flex-direction:column;gap:.7rem}.stem{display:grid;grid-template-columns:84px 1fr auto;gap:.7rem;align-items:center}.stemName{font-weight:700}.stemSub{font-size:.74rem;color:var(--muted)} .stemGain{display:flex;align-items:center;gap:.4rem}.stemGain input{width:100%;accent-color:var(--primary)} .miniControls{display:flex;gap:.35rem}.miniControls button{padding:.5rem .62rem;border-radius:10px;background:var(--offset);font-size:.74rem;font-weight:700}.miniControls .solo.active{background:rgba(232,175,52,.18);color:var(--warning)} .miniControls .mute.active{background:rgba(221,105,116,.18);color:var(--error)} .miniControls .cover.active{background:rgba(109,170,69,.18);color:var(--success)}
     .jobList{display:flex;flex-direction:column;gap:.45rem}.job{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;padding:.8rem .9rem;border-radius:14px;background:var(--offset)}.dot{width:10px;height:10px;border-radius:999px;background:var(--faint)}.job.done .dot{background:var(--success)}.job.live .dot{background:var(--primary)}.job.wait .dot{background:var(--warning)}
-    .note{padding:.8rem;border-radius:14px;background:var(--offset);color:var(--muted);font-size:.86rem}.sessionCard .tags{display:flex;gap:.45rem;flex-wrap:wrap}.tag{padding:.35rem .55rem;border-radius:999px;background:var(--offset);font-size:.74rem} .footerNav{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;padding:.75rem;border-top:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .footerNav button{padding:.7rem .25rem;border-radius:12px;font-size:.76rem;font-weight:700;color:var(--muted)} .footerNav button.active{background:var(--soft);color:var(--primary)} .good{color:var(--success)} .warn{color:var(--warning)}
+    .note{padding:.8rem;border-radius:14px;background:var(--offset);color:var(--muted);font-size:.86rem}.sessionCard .tags{display:flex;gap:.45rem;flex-wrap:wrap}.tag{padding:.35rem .55rem;border-radius:999px;background:var(--offset);font-size:.74rem} .footerNav{display:grid;grid-template-columns:repeat(5,1fr);gap:.25rem;padding:.75rem;border-top:1px solid color-mix(in oklab,var(--text) 10%, transparent);background:rgba(255,255,255,.02)} .footerNav button{padding:.7rem .25rem;border-radius:12px;font-size:.76rem;font-weight:700;color:var(--muted)} .footerNav button.active{background:var(--soft);color:var(--primary)} .good{color:var(--success)} .warn{color:var(--warning)}
     .bar{height:6px;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--primary);border-radius:999px;transition:width .25s ease}.job.done .bar i{background:var(--success)}.jobBody{display:flex;flex-direction:column;gap:.4rem;min-width:0;font-size:.9rem}.job.indet .bar i{width:40%!important;animation:qtslide 1.1s ease-in-out infinite alternate}@keyframes qtslide{from{margin-left:0}to{margin-left:60%}}
     .ring{--p:0;flex:none;width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p)*1%),var(--offset) 0);display:grid;place-items:center;position:relative}.ring:before{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--surface2)}.ring span{position:relative;font-size:.72rem;font-weight:700}.titleRow{display:flex;align-items:center;gap:.7rem}
     .mbar{height:3px;margin-top:.3rem;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.mbar i{display:block;height:100%;width:0;background:var(--primary);transition:width .25s ease}
@@ -94,9 +94,10 @@
   <div class="card stack"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
   <div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
 </section>
+<section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div id="libraryList" class="stack"></div></section>
 <section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Sessions remember the song, loop, speed, mix and notes. They are kept in this browser.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
 <section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Settings</h1><p>The Demucs backend runs on your own computer.</p></div><div class="card stack"><div class="field"><label for="backendBase">Backend address</label><input id="backendBase" value="http://localhost:8000" /></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div></section>
-<nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
+<nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="library">Library</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
 </section></main>
 <audio id="masterAudio" crossorigin="anonymous"></audio>
 <script type="text/plain" id="qtWorklet">
@@ -241,7 +242,7 @@ registerProcessor('qt-player', QTPlayer);
 </script>
 <script>
 const $=id=>document.getElementById(id);
-const screens={import:$('importScreen'),practice:$('practiceScreen'),sessions:$('sessionsScreen'),settings:$('settingsScreen')};
+const screens={import:$('importScreen'),practice:$('practiceScreen'),library:$('libraryScreen'),sessions:$('sessionsScreen'),settings:$('settingsScreen')};
 const navButtons=[...document.querySelectorAll('.footerNav button')];
 const masterAudio=$('masterAudio'); // only used to preview the original upload before stems exist
 const waveCanvas=$('waveCanvas'), waveWrap=$('waveWrap'), ctx=waveCanvas.getContext('2d');
@@ -250,7 +251,7 @@ const stemDefaults={Vocals:{volume:78,mute:false,solo:false,url:''},Drums:{volum
 let selectedModel='htdemucs', selectedDevice='cpu', selectedTarget='Guitar', coverMode=true, loopEnabled=true, speed=1, loopA=0, loopB=1, loopReps=0, dragMode=null, waveformData=null, sessions=[], fileName='No song loaded', objectUrl=null, scrubbing=false;
 const stemState=structuredClone(stemDefaults);
 
-function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name)); if(name==='practice'&&typeof resizeCanvas==='function') requestAnimationFrame(resizeCanvas);}
+function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name)); if(name==='practice'&&typeof resizeCanvas==='function') requestAnimationFrame(resizeCanvas); if(name==='library') loadLibrary(); if(name==='sessions') syncSessions();}
 navButtons.forEach(btn=>btn.addEventListener('click',()=>showScreen(btn.dataset.screen)));
 function formatTime(sec){if(!isFinite(sec)) return '0:00'; const m=Math.floor(sec/60), s=Math.floor(sec%60).toString().padStart(2,'0'); return `${m}:${s}`}
 function backendBase(){return $('backendBase').value.replace(/\/$/,'')}
@@ -447,7 +448,7 @@ async function runDemucs(){const file=$('audioFile').files?.[0]; if(!file){alert
     engineReset(); Object.keys(hydr).forEach(k=>delete hydr[k]); updateHydrationUI();
     if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted=false; masterAudio.volume=1; masterAudio.load();
     buildWaveformFromFile(file).catch(()=>{});
-    const form=new FormData(); form.append('file',file); const splitStem=$('splitMode').value, useModel=effectiveModel(); form.append('model',useModel); form.append('device',selectedDevice); if(splitStem){form.append('stem',splitStem); selectedTarget=splitStem[0].toUpperCase()+splitStem.slice(1);}
+    const form=new FormData(); form.append('file',file); const splitStem=$('splitMode').value, useModel=effectiveModel(); form.append('title',fileName); form.append('model',useModel); form.append('device',selectedDevice); if(splitStem){form.append('stem',splitStem); selectedTarget=splitStem[0].toUpperCase()+splitStem.slice(1);}
     const base=backendBase();
     const start=await uploadWithProgress(`${base}/api/demucs/separate`,form,p=>{stepPct[0]=p; renderPipeline();});
     badge.textContent='separating'; note.textContent='Splitting stems on your PC...';
@@ -483,13 +484,47 @@ function restoreSnapshot(s){
   const sp=typeof s.speed==='string'?parseFloat(s.speed)/100:Number(s.speed); setSpeed(sp>=.5&&sp<=1.5?sp:1);
   $('notes').value=s.notes||''; waveformData=null;
   setStemUrls(outputs); showScreen('practice');}
-function saveSession(){const snap=snapshot(); if(!snap) return; sessions.unshift(snap); LS.set('qt.sessions',sessions); renderSessions(); showScreen('sessions');}
+const newId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+// Sessions live on the PC (so phone and computer share them) with a copy in this browser as a fallback.
+let deletedIds=LS.get('qt.deleted',[]); if(!Array.isArray(deletedIds)) deletedIds=[];
+function persistSessions(){LS.set('qt.sessions',sessions); LS.set('qt.deleted',deletedIds); pushSessions();}
+async function pushSessions(){try{await fetch(`${backendBase()}/api/sessions`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessions,deleted:deletedIds})});}catch{}}
+async function syncSessions(){
+  try{
+    const d=await (await fetch(`${backendBase()}/api/sessions`)).json();
+    deletedIds=[...new Set([...(d.deleted||[]),...deletedIds])]; const gone=new Set(deletedIds), byId=new Map();
+    [...(d.sessions||[]),...sessions].forEach(s=>{if(!s) return; if(!s.id) s.id=newId(); if(!gone.has(s.id)&&!byId.has(s.id)) byId.set(s.id,s);});
+    sessions=[...byId.values()].sort((a,b)=>(b.savedAt||0)-(a.savedAt||0)); persistSessions(); renderSessions();
+  }catch{}}
+function saveSession(){const snap=snapshot(); if(!snap) return; snap.id=newId(); sessions.unshift(snap); persistSessions(); renderSessions(); showScreen('sessions');}
+
+/* ---------- library (songs saved on the PC) ---------- */
+let librarySongs=[];
+async function loadLibrary(){
+  const note=$('libraryNote');
+  try{const r=await fetch(`${backendBase()}/api/library`); if(!r.ok) throw new Error(); librarySongs=(await r.json()).songs||[]; note.classList.add('hidden');}
+  catch{librarySongs=[]; note.textContent=`Could not reach the backend at ${backendBase()}.`; note.classList.remove('hidden');}
+  renderLibrary();}
+function renderLibrary(){
+  const host=$('libraryList'); host.innerHTML=''; const q=$('libSearch').value.trim().toLowerCase();
+  const list=librarySongs.filter(s=>!q||s.title.toLowerCase().includes(q));
+  const mk=(tag,cls,text)=>{const el=document.createElement(tag); if(cls) el.className=cls; if(text!=null) el.textContent=text; return el;};
+  if(!list.length){host.appendChild(mk('div','card note',librarySongs.length?'No songs match your search.':'No songs yet. Split one on the Import tab and it shows up here.')); return;}
+  list.forEach(s=>{
+    const card=mk('div','card stack sessionCard'), row=mk('div','row'); row.append(mk('strong',null,s.title),mk('span','subtle',new Date(s.created*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
+    const tags=mk('div','tags'); [s.model,s.stem&&`just ${s.stem}`,s.hasOriginal&&'original saved'].filter(Boolean).forEach(t=>tags.appendChild(mk('span','tag',t)));
+    const grid=mk('div','persistGrid three'); const open=mk('button','primary','Practice'), ren=mk('button','secondary','Rename'), del=mk('button','tertiary','Delete');
+    ren.addEventListener('click',async()=>{const t=prompt('Song name',s.title==='Untitled song'?'':s.title); if(!t||!t.trim()) return; try{await fetch(`${backendBase()}/api/library/${s.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t.trim()})});}catch{} loadLibrary();});
+    open.addEventListener('click',()=>restoreSnapshot({fileName:s.title,model:s.model,target:s.stem?s.stem[0].toUpperCase()+s.stem.slice(1):undefined,outputs:s.outputs}));
+    del.addEventListener('click',async()=>{if(!confirm(`Delete "${s.title}" and its stems from your PC?`)) return; try{await fetch(`${backendBase()}/api/library/${s.id}`,{method:'DELETE'});}catch{} loadLibrary();});
+    grid.append(open,ren,del); card.append(row,tags,grid); host.appendChild(card);});}
+$('libSearch').addEventListener('input',renderLibrary);
 function renderSessions(){const host=$('sessionsList'); host.innerHTML=''; if(!sessions.length){const e=document.createElement('div'); e.className='card note'; e.textContent='No saved sessions yet. Open a song in Practice and press Save session.'; host.appendChild(e); return;}
   const mk=(tag,cls,text)=>{const el=document.createElement(tag); if(cls) el.className=cls; if(text!=null) el.textContent=text; return el;};
   sessions.forEach((s,i)=>{const card=mk('div','card stack sessionCard'); const row=mk('div','row'); row.append(mk('strong',null,s.title||'Untitled'),mk('span','subtle',s.savedAt?new Date(s.savedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):(s.when||'')));
     const tags=mk('div','tags'); const spd=typeof s.speed==='number'?Math.round(s.speed*100)+'%':s.speed; const lp=s.loop&&s.dur?`${formatTime(s.loop.a*s.dur)}–${formatTime(s.loop.b*s.dur)}`:(s.loop&&s.loop.display)||''; [s.model,s.device,spd&&`${spd} speed`,lp&&`loop ${lp}`].filter(Boolean).forEach(t=>tags.appendChild(mk('span','tag',t)));
     const grid=mk('div','persistGrid three'); const mkBtn=(cls,label,fn)=>{const b=mk('button',cls,label); b.addEventListener('click',fn); return b;};
-    grid.append(mkBtn('primary','Resume',()=>restoreSnapshot(s)),mkBtn('secondary','Export',()=>exportJson('practice-session.json',s)),mkBtn('tertiary','Delete',()=>{if(confirm('Delete this saved session?')){sessions.splice(i,1); LS.set('qt.sessions',sessions); renderSessions();}}));
+    grid.append(mkBtn('primary','Resume',()=>restoreSnapshot(s)),mkBtn('secondary','Export',()=>exportJson('practice-session.json',s)),mkBtn('tertiary','Delete',()=>{if(confirm('Delete this saved session?')){if(s.id) deletedIds.push(s.id); sessions.splice(i,1); persistSessions(); renderSessions();}}));
     card.append(row,tags,mk('div','note',s.notes||'No notes added.'),grid); host.appendChild(card);});}
 // Remember the song being practiced so it can be picked up again after a reload.
 let lastSnap='';
@@ -513,7 +548,7 @@ $('setA').addEventListener('click',()=>{const d=curDur(); if(!d) return; loopA=M
 $('speedDown').addEventListener('click',()=>setSpeed(Math.max(.5,Math.round((speed-.05)*100)/100))); $('speedUp').addEventListener('click',()=>setSpeed(Math.min(1.5,Math.round((speed+.05)*100)/100)));
 document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.addEventListener('click',()=>setTarget(btn.textContent.trim())));
 $('coverToggle').addEventListener('click',()=>{coverMode=!coverMode; applyCoverUI(); updateMix();});
-$('saveSessionBtn').addEventListener('click',saveSession); $('exportCurrentBtn').addEventListener('click',()=>{const s=snapshot(); if(s) exportJson('current-practice-session.json',s);}); $('exportAllBtn').addEventListener('click',()=>exportJson('practice-session-pack.json',{sessions})); $('importPack').addEventListener('change',async e=>{const f=e.target.files?.[0]; if(!f) return; try{const parsed=JSON.parse(await f.text()); const list=(Array.isArray(parsed.sessions)?parsed.sessions:[parsed]).filter(x=>x&&(x.outputs||x.stems)); sessions=[...list,...sessions]; LS.set('qt.sessions',sessions); renderSessions(); showScreen('sessions');}catch{} e.target.value='';});
+$('saveSessionBtn').addEventListener('click',saveSession); $('exportCurrentBtn').addEventListener('click',()=>{const s=snapshot(); if(s) exportJson('current-practice-session.json',s);}); $('exportAllBtn').addEventListener('click',()=>exportJson('practice-session-pack.json',{sessions})); $('importPack').addEventListener('change',async e=>{const f=e.target.files?.[0]; if(!f) return; try{const parsed=JSON.parse(await f.text()); const list=(Array.isArray(parsed.sessions)?parsed.sessions:[parsed]).filter(x=>x&&(x.outputs||x.stems)); list.forEach(x=>{x.id=newId();}); sessions=[...list,...sessions]; persistSessions(); renderSessions(); showScreen('sessions');}catch{} e.target.value='';});
 $('themeBtn').addEventListener('click',()=>{const root=document.documentElement, next=root.getAttribute('data-theme')==='dark'?'light':'dark'; root.setAttribute('data-theme',next); try{localStorage.setItem('qt.theme',next)}catch{} setTimeout(drawWaveform,30);});
 // Drag anywhere on the waveform to scrub.
 let lastScrubSeek=0;
@@ -523,6 +558,7 @@ waveCanvas.addEventListener('pointermove',e=>{if(scrubbing) scrubTo(e,false);});
 waveCanvas.addEventListener('pointerup',e=>{if(!scrubbing) return; scrubbing=false; scrubTo(e,true);}); waveCanvas.addEventListener('pointercancel',()=>{scrubbing=false;});
 $('markerA').addEventListener('pointerdown',e=>{dragMode='A'; e.currentTarget.setPointerCapture(e.pointerId)}); $('markerB').addEventListener('pointerdown',e=>{dragMode='B'; e.currentTarget.setPointerCapture(e.pointerId)}); waveWrap.addEventListener('pointermove',e=>{if(!dragMode) return; const ratio=pointerToRatio(e.clientX); if(dragMode==='A') loopA=Math.min(loopB-.01,ratio); if(dragMode==='B') loopB=Math.max(loopA+.01,ratio); updateLoopUI();}); waveWrap.addEventListener('pointerup',()=>dragMode=null); waveWrap.addEventListener('pointerleave',()=>dragMode=null);
 if(location.protocol.startsWith('http')&&!['localhost','127.0.0.1',''].includes(location.hostname)) $('backendBase').value=`http://${location.hostname}:8000`;
+syncSessions();
 renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar'); requestAnimationFrame(frame);
 </script>
 </body>

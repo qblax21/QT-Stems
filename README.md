@@ -60,6 +60,8 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Set `QT_PYTHON` to y
 
 - It is installable: on iPhone use Share, then Add to Home Screen, and it opens full screen with the QT Stems icon (`icons/` holds the PNGs, `manifest.webmanifest` the Android/Chrome install info).
 
+- **Library:** every song split from any device is stored on the PC: the stems under `stems/` and the original upload under `library/`. The Library tab lists, searches, renames and deletes them, so you can practice a song from your phone or computer without uploading it again. Saved sessions are also kept on the PC (`sessions.json`) and shared between devices; the browser keeps a local copy as a fallback.
+
 ## Security note
 This is a local/LAN tool. There is no authentication, upload limit or job queue, and `python -m http.server` serves the whole folder. Do not expose it to the public internet as-is. Separated stems are saved under `stems/`.
 

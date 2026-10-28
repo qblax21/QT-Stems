@@ -1,5 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
+import json
+import re
 import shutil
 import tempfile
 import threading
@@ -24,6 +26,12 @@ BASE_DIR = Path(__file__).resolve().parent
 STEMS_DIR = BASE_DIR / "stems"
 STEMS_DIR.mkdir(parents=True, exist_ok=True)
 ERROR_LOG = BASE_DIR / "last_error.txt"
+LIBRARY_DIR = BASE_DIR / "library"  # original uploads, kept so every song sent from any device lives on this PC
+LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+SESSIONS_FILE = BASE_DIR / "sessions.json"
+SESSIONS_LOCK = threading.Lock()
+JOB_ID_RE = re.compile(r"^[0-9a-f]{10}$")
+BASE_STEMS = {"vocals", "drums", "bass", "other", "guitar", "piano"}
 
 ALLOWED_MODELS = {"htdemucs", "htdemucs_ft", "htdemucs_6s", "mdx_extra"}
 TWO_STEM_CHOICES = {"vocals", "drums", "bass", "other", "guitar", "piano"}
@@ -133,8 +141,7 @@ def collect_stem_files(source_path: Path, output_root: Path, model: str):
     if not stem_dir.exists():
         raise RuntimeError(f"Stem directory not found: {stem_dir}")
 
-    base = {"vocals", "drums", "bass", "other", "guitar", "piano"}
-    allowed_stems = base | {"no_" + b for b in base}
+    allowed_stems = BASE_STEMS | {"no_" + b for b in BASE_STEMS}
     allowed_exts = {".wav", ".mp3", ".flac"}
 
     files = []
@@ -149,7 +156,7 @@ def collect_stem_files(source_path: Path, output_root: Path, model: str):
     return files
 
 
-def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str, stem: str = ""):
+def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str, stem: str = "", title: str = ""):
     job = JOBS[job_id]
     try:
         with RUN_LOCK:  # one separation at a time; others stay "queued"
@@ -172,6 +179,15 @@ def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: 
 
             if not outputs:
                 raise RuntimeError("Demucs finished, but no output audio files were copied.")
+
+            try:  # library bookkeeping must never fail a finished separation
+                shutil.copy2(source_path, LIBRARY_DIR / f"{job_id}{source_path.suffix.lower()}")
+                (public_dir / "meta.json").write_text(json.dumps({
+                    "title": title or source_path.stem, "model": model, "device": device, "stem": stem,
+                    "created": time.time(), "original": source_path.name,
+                }), encoding="utf-8")
+            except Exception:
+                log_error(traceback.format_exc())
 
             job.update(status="done", stage="done", percent=100.0, outputs=outputs)
     except BaseException as e:  # Demucs calls sys.exit() on some failures
@@ -200,6 +216,7 @@ def separate(
     model: str = Form("htdemucs"),
     device: str = Form("cpu"),
     stem: str = Form(""),
+    title: str = Form(""),
 ):
     if model not in ALLOWED_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
@@ -237,7 +254,7 @@ def separate(
         "_done": 0,
     }
     threading.Thread(
-        target=run_job, args=(job_id, source_path, work_dir, model, device, stem), daemon=True
+        target=run_job, args=(job_id, source_path, work_dir, model, device, stem, title.strip()[:200]), daemon=True
     ).start()
     return {"status": "queued", "job_id": job_id, "model": model, "device": device}
 
@@ -248,6 +265,93 @@ def job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Unknown job (the server may have restarted).")
     return {k: v for k, v in job.items() if not k.startswith("_")}
+
+
+@app.get("/api/library")
+def library():
+    """Every song that has been split on this PC (from any device), newest first."""
+    items = []
+    for d in STEMS_DIR.iterdir():
+        if not d.is_dir() or not JOB_ID_RE.match(d.name):
+            continue
+        meta = {}
+        try:
+            meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        outputs = {
+            p.stem.lower(): f"/stems/{d.name}/{p.name}"
+            for p in d.iterdir()
+            if p.is_file() and p.suffix.lower() in {".wav", ".mp3", ".flac"}
+            and p.stem.lower() in (BASE_STEMS | {"no_" + b for b in BASE_STEMS})
+        }
+        if not outputs:
+            continue
+        items.append({
+            "id": d.name,
+            "title": meta.get("title") or "Untitled song",
+            "model": meta.get("model", ""),
+            "stem": meta.get("stem", ""),
+            "created": meta.get("created") or d.stat().st_mtime,
+            "outputs": outputs,
+            "hasOriginal": any(LIBRARY_DIR.glob(d.name + ".*")),
+        })
+    items.sort(key=lambda i: i["created"], reverse=True)
+    return {"songs": items}
+
+
+@app.patch("/api/library/{song_id}")
+def rename_song(song_id: str, payload: dict):
+    if not JOB_ID_RE.match(song_id) or not (STEMS_DIR / song_id).is_dir():
+        raise HTTPException(status_code=404, detail="Unknown song")
+    title = str(payload.get("title", "")).strip()[:200]
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is empty")
+    meta_file = STEMS_DIR / song_id / "meta.json"
+    try:
+        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    except Exception:
+        meta = {"created": (STEMS_DIR / song_id).stat().st_mtime}
+    meta["title"] = title
+    meta_file.write_text(json.dumps(meta), encoding="utf-8")
+    return {"id": song_id, "title": title}
+
+
+@app.delete("/api/library/{song_id}")
+def delete_song(song_id: str):
+    if not JOB_ID_RE.match(song_id):
+        raise HTTPException(status_code=400, detail="Bad id")
+    shutil.rmtree(STEMS_DIR / song_id, ignore_errors=True)
+    for f in LIBRARY_DIR.glob(song_id + ".*"):
+        f.unlink(missing_ok=True)
+    JOBS.pop(song_id, None)
+    return {"deleted": song_id}
+
+
+@app.get("/api/sessions")
+def get_sessions():
+    with SESSIONS_LOCK:
+        try:
+            data = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+            return {"sessions": data.get("sessions", []), "deleted": data.get("deleted", [])}
+        except Exception:
+            return {"sessions": [], "deleted": []}
+
+
+@app.put("/api/sessions")
+def put_sessions(payload: dict):
+    sessions = payload.get("sessions")
+    if not isinstance(sessions, list) or len(sessions) > 500:
+        raise HTTPException(status_code=400, detail="Expected a list of sessions")
+    deleted = payload.get("deleted") or []
+    if not isinstance(deleted, list):
+        deleted = []
+    text = json.dumps({"sessions": sessions, "deleted": [str(d) for d in deleted][-1000:]})
+    if len(text) > 5_000_000:
+        raise HTTPException(status_code=413, detail="Too large")
+    with SESSIONS_LOCK:
+        SESSIONS_FILE.write_text(text, encoding="utf-8")
+    return {"saved": len(sessions)}
 
 
 app.mount("/stems", StaticFiles(directory=STEMS_DIR), name="stems")
