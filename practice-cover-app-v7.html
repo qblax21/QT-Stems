@@ -38,6 +38,7 @@
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
     .offline{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:color-mix(in oklab,var(--warning) 22%,var(--surface));color:var(--text);font-size:.8rem;border-bottom:1px solid color-mix(in oklab,var(--warning) 50%,transparent)}.offline button{flex:none;padding:.4rem .8rem;border-radius:10px;background:var(--offset);font-weight:700;font-size:.78rem}
     .chips{display:flex;flex-wrap:wrap;gap:.45rem}.chip2{display:inline-flex;align-items:stretch;border-radius:999px;background:var(--offset);border:1px solid transparent;overflow:hidden}.chip2.active{background:var(--soft);border-color:color-mix(in oklab,var(--primary) 35%,transparent)}.chip2 button{padding:.5rem .7rem;font-size:.82rem;font-weight:700}.chip2 button+button{padding-left:.5rem;padding-right:.7rem;color:var(--muted);border-left:1px solid color-mix(in oklab,var(--text) 10%,transparent)}.chips .subtle{font-size:.82rem}
+    .libBar{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.libBar .smallBtn{padding:.5rem .7rem;font-size:.78rem}.smallBtn.danger{background:color-mix(in oklab,var(--error) 22%,var(--offset));color:var(--error)}.smallBtn:disabled{opacity:.45}.sessionCard.picked{border-color:var(--primary);background:color-mix(in oklab,var(--primary) 12%,var(--surface2))}
     .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
     @media (max-width:540px){.app{padding:0}.phone{height:100dvh;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
@@ -118,7 +119,7 @@
   <div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
   <button class="secondary" id="mixDownloadBtn">Download this mix (MP3)</button><div class="note hidden" id="mixDownloadNote"></div>
 </section>
-<section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div id="libraryList" class="stack"></div></section>
+<section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div class="row"><span class="subtle" id="libStats"></span><div class="libBar" id="libBar"></div></div><div id="libraryList" class="stack"></div></section>
 <section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Sessions remember the song, loop, speed, mix and notes. They are kept in this browser.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
 <section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Settings</h1><p>The Demucs backend runs on your own computer.</p></div><div class="card stack"><div class="field"><label for="backendBase">Backend address</label><input id="backendBase" value="http://localhost:8000" /></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div></section>
 <nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="library">Library</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
@@ -600,20 +601,32 @@ async function syncSessions(){
 function saveSession(){const snap=snapshot(); if(!snap) return; snap.id=newId(); sessions.unshift(snap); persistSessions(); renderSessions(); showScreen('sessions');}
 
 /* ---------- library (songs saved on the PC) ---------- */
-let librarySongs=[];
+let librarySongs=[], libStats={total:0,free:0}, selecting=false; const picked=new Set();
+const fmtBytes=b=>b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?Math.round(b/1e6)+' MB':Math.max(1,Math.round(b/1e3))+' KB';
 async function loadLibrary(){
   const note=$('libraryNote');
-  try{const r=await fetch(`${backendBase()}/api/library`); if(!r.ok) throw new Error(); librarySongs=(await r.json()).songs||[]; note.classList.add('hidden');}
+  try{const r=await fetch(`${backendBase()}/api/library`); if(!r.ok) throw new Error(); const d=await r.json(); librarySongs=d.songs||[]; libStats={total:d.total_bytes||0,free:d.disk_free_bytes||0}; note.classList.add('hidden');}
   catch{librarySongs=[]; note.textContent=`Could not reach the backend at ${backendBase()}.`; note.classList.remove('hidden');}
-  renderLibrary();}
+  picked.forEach(id=>{if(!librarySongs.some(s=>s.id===id)) picked.delete(id);}); renderLibrary();}
 function renderLibrary(){
   const host=$('libraryList'); host.innerHTML=''; const q=$('libSearch').value.trim().toLowerCase();
   const list=librarySongs.filter(s=>!q||s.title.toLowerCase().includes(q));
   const mk=(tag,cls,text)=>{const el=document.createElement(tag); if(cls) el.className=cls; if(text!=null) el.textContent=text; return el;};
+  $('libStats').textContent=librarySongs.length?`${librarySongs.length} songs · ${fmtBytes(libStats.total)} used${libStats.free?` · ${fmtBytes(libStats.free)} free on the PC`:''}`:'';
+  const bar=$('libBar'); bar.innerHTML='';
+  if(!selecting){const b=mk('button','smallBtn','Select'); b.addEventListener('click',()=>{selecting=true; picked.clear(); renderLibrary();}); bar.appendChild(b);}
+  else{
+    const untitled=mk('button','smallBtn','Pick untitled'); untitled.addEventListener('click',()=>{librarySongs.filter(s=>s.title==='Untitled song').forEach(s=>picked.add(s.id)); renderLibrary();});
+    const all=mk('button','smallBtn','Pick shown'); all.addEventListener('click',()=>{list.forEach(s=>picked.add(s.id)); renderLibrary();});
+    const del=mk('button','smallBtn danger',`Delete ${picked.size}`); del.disabled=!picked.size;
+    del.addEventListener('click',async()=>{const n=picked.size, size=librarySongs.filter(s=>picked.has(s.id)).reduce((a,s)=>a+s.bytes,0); if(!n||!confirm(`Delete ${n} song${n>1?'s':''} (${fmtBytes(size)}) from your PC? This cannot be undone.`)) return; try{await fetch(`${backendBase()}/api/library/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...picked]})});}catch{} picked.clear(); selecting=false; loadLibrary();});
+    const done=mk('button','smallBtn','Done'); done.addEventListener('click',()=>{selecting=false; picked.clear(); renderLibrary();});
+    bar.append(untitled,all,del,done);}
   if(!list.length){host.appendChild(mk('div','card note',librarySongs.length?'No songs match your search.':'No songs yet. Split one on the Import tab and it shows up here.')); return;}
   list.forEach(s=>{
-    const card=mk('div','card stack sessionCard'), row=mk('div','row'); row.append(mk('strong',null,s.title),mk('span','subtle',new Date(s.created*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
-    const tags=mk('div','tags'); [s.model,s.stem&&`just ${s.stem}`,s.hasOriginal&&'original saved'].filter(Boolean).forEach(t=>tags.appendChild(mk('span','tag',t)));
+    const card=mk('div','card stack sessionCard'+(picked.has(s.id)?' picked':'')), row=mk('div','row'); row.append(mk('strong',null,s.title),mk('span','subtle',new Date(s.created*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
+    const tags=mk('div','tags'); [s.model,s.stem&&`just ${s.stem}`,fmtBytes(s.bytes)].filter(Boolean).forEach(t=>tags.appendChild(mk('span','tag',t)));
+    if(selecting){card.addEventListener('click',()=>{picked.has(s.id)?picked.delete(s.id):picked.add(s.id); renderLibrary();}); card.append(row,tags); host.appendChild(card); return;}
     const grid=mk('div','persistGrid three'); const prev=LS.get('qt.songs',{})[s.id]; const open=mk('button','primary',prev?'Practice again':'Practice'), ren=mk('button','secondary','Rename'), del=mk('button','tertiary','Delete');
     ren.addEventListener('click',async()=>{const t=prompt('Song name',s.title==='Untitled song'?'':s.title); if(!t||!t.trim()) return; try{await fetch(`${backendBase()}/api/library/${s.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t.trim()})});}catch{} loadLibrary();});
     open.addEventListener('click',()=>prev?restoreSnapshot({...prev,fileName:s.title,outputs:s.outputs}):restoreSnapshot({fileName:s.title,model:s.model,target:s.stem?s.stem[0].toUpperCase()+s.stem.slice(1):undefined,outputs:s.outputs}));

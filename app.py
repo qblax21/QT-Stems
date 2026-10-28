@@ -332,8 +332,10 @@ def library():
         }
         if not outputs:
             continue
+        size = sum(p.stat().st_size for p in d.iterdir() if p.is_file()) + sum(p.stat().st_size for p in LIBRARY_DIR.glob(d.name + ".*"))
         items.append({
             "id": d.name,
+            "bytes": size,
             "title": meta.get("title") or "Untitled song",
             "model": meta.get("model", ""),
             "stem": meta.get("stem", ""),
@@ -342,7 +344,27 @@ def library():
             "hasOriginal": any(LIBRARY_DIR.glob(d.name + ".*")),
         })
     items.sort(key=lambda i: i["created"], reverse=True)
-    return {"songs": items}
+    return {
+        "songs": items,
+        "total_bytes": sum(i["bytes"] for i in items),
+        "disk_free_bytes": shutil.disk_usage(BASE_DIR).free,
+    }
+
+
+@app.post("/api/library/delete")
+def delete_songs(payload: dict):
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or len(ids) > 500:
+        raise HTTPException(status_code=400, detail="Expected a list of ids")
+    deleted = []
+    for song_id in ids:
+        if isinstance(song_id, str) and JOB_ID_RE.match(song_id):
+            shutil.rmtree(STEMS_DIR / song_id, ignore_errors=True)
+            for f in LIBRARY_DIR.glob(song_id + ".*"):
+                f.unlink(missing_ok=True)
+            JOBS.pop(song_id, None)
+            deleted.append(song_id)
+    return {"deleted": deleted}
 
 
 @app.patch("/api/library/{song_id}")
