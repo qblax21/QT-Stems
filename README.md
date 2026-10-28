@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.svg" alt="QT Stems logo" width="96"></p>
+
 # QT-Stems (Quick Tune)
 
 A self-hosted music practice app. Upload a song, split it into stems with [Demucs](https://github.com/facebookresearch/demucs), then mix stems, mute the instrument you want to play, loop sections, change speed and keep practice notes. Runs on your own computer; no paid service needed. Use it from your phone over your home Wi-Fi.
@@ -49,6 +51,9 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Set `QT_PYTHON` to y
 - The app uploads a song, then polls `/api/jobs/<id>` for real separation progress (Demucs runs in a background thread, one job at a time).
 - Stems are saved as 256 kbps MP3 and downloaded fully to the device before the practice controls unlock.
 - Playback uses Web Audio: every stem is decoded in memory and mixed inside one AudioWorklet, so all stems share a single sample clock (no drift), mute/solo/seek are instant, and A/B loops wrap sample-accurately. Speed changes use WSOLA time-stretching, so pitch is preserved. Very long songs are decoded at a lower sample rate to stay within phone memory.
+
+- On plain `http` (a phone on your LAN) browsers hide AudioWorklet, so the same mixer runs on a `ScriptProcessorNode` instead. The line under "Stem mixer" shows which one is active.
+- Saved sessions (song, loop, speed, mix, notes) and the last song you practiced are kept in the browser's local storage, with stem addresses stored relative to the backend so they work from the PC, LAN or Tailscale. The theme is purple and silver, with light and dark modes (follows your system, toggle in the header).
 
 ## Security note
 This is a local/LAN tool. There is no authentication, upload limit or job queue, and `python -m http.server` serves the whole folder. Do not expose it to the public internet as-is. Separated stems are saved under `stems/`.

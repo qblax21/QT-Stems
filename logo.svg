@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="QT Stems logo">
+  <defs>
+    <linearGradient id="qtBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6b3fa8"/><stop offset="1" stop-color="#3a1b66"/></linearGradient>
+    <linearGradient id="qtSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f4f6"/><stop offset="1" stop-color="#b3b5b9"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#qtBg)" stroke="#c9cbce" stroke-width="2.5"/>
+  <g fill="#c9cbce" opacity=".22">
+    <rect x="11" y="62" width="6" height="22" rx="3"/><rect x="21" y="52" width="6" height="32" rx="3"/>
+    <rect x="73" y="52" width="6" height="32" rx="3"/><rect x="83" y="62" width="6" height="22" rx="3"/>
+  </g>
+  <g fill="url(#qtSilver)">
+    <ellipse cx="34" cy="68" rx="10.5" ry="7.8" transform="rotate(-20 34 68)"/>
+    <ellipse cx="66" cy="60" rx="10.5" ry="7.8" transform="rotate(-20 66 60)"/>
+    <rect x="39" y="30" width="5.5" height="38" rx="1.5"/>
+    <rect x="71" y="22" width="5.5" height="38" rx="1.5"/>
+    <polygon points="39,30 76.5,22 76.5,32 39,40"/>
+  </g>
+  <path d="M14 84 Q26 76 38 84 T62 84 T86 84" fill="none" stroke="#c9cbce" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+</svg>
