@@ -36,7 +36,10 @@ Open `http://localhost:5500/practice-cover-app-v7.html`.
 ## Models
 - `htdemucs`: 4 stems (vocals, drums, bass, other)
 - `htdemucs_6s`: adds guitar and piano
-- `mdx_extra`: alternative 4-stem model
+- `htdemucs_ft`: same 4 stems, cleaner separation, about 4x slower
+- `mdx_extra`: alternative 4-stem model (API only, not in the app)
+
+"What to split" in the app runs Demucs in two-stem mode: you get just the chosen part (vocals, drums, bass, guitar or piano) plus a single backing track. Guitar and piano switch to the 6-stem model automatically. Demucs does not split beyond 6 stems.
 
 Pick GPU in the app only if CUDA-enabled PyTorch is installed (`python -c "import torch; print(torch.cuda.is_available())"`).
 

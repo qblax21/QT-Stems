@@ -25,7 +25,9 @@ STEMS_DIR = BASE_DIR / "stems"
 STEMS_DIR.mkdir(parents=True, exist_ok=True)
 ERROR_LOG = BASE_DIR / "last_error.txt"
 
-ALLOWED_MODELS = {"htdemucs", "htdemucs_6s", "mdx_extra"}
+ALLOWED_MODELS = {"htdemucs", "htdemucs_ft", "htdemucs_6s", "mdx_extra"}
+TWO_STEM_CHOICES = {"vocals", "drums", "bass", "other", "guitar", "piano"}
+SIX_STEM_ONLY = {"guitar", "piano"}
 ALLOWED_DEVICES = {"cpu", "cuda"}
 MP3_BITRATE = "256"
 
@@ -89,7 +91,7 @@ def _install_progress_hooks():
     _hooked = True
 
 
-def run_demucs(input_path: Path, output_root: Path, model: str, device: str):
+def run_demucs(input_path: Path, output_root: Path, model: str, device: str, stem: str = ""):
     try:
         from demucs.separate import main as demucs_main
     except Exception as e:
@@ -114,8 +116,10 @@ def run_demucs(input_path: Path, output_root: Path, model: str, device: str):
         "-d", device,
         "--mp3", "--mp3-bitrate", MP3_BITRATE,
         "-o", str(output_root),
-        str(input_path),
     ]
+    if stem:
+        args += ["--two-stems", stem]  # writes <stem> and no_<stem> only
+    args.append(str(input_path))
 
     code = demucs_main(args)
     if code not in (0, None):
@@ -129,7 +133,8 @@ def collect_stem_files(source_path: Path, output_root: Path, model: str):
     if not stem_dir.exists():
         raise RuntimeError(f"Stem directory not found: {stem_dir}")
 
-    allowed_stems = {"vocals", "drums", "bass", "other", "guitar", "piano", "no_vocals"}
+    base = {"vocals", "drums", "bass", "other", "guitar", "piano"}
+    allowed_stems = base | {"no_" + b for b in base}
     allowed_exts = {".wav", ".mp3", ".flac"}
 
     files = []
@@ -144,14 +149,14 @@ def collect_stem_files(source_path: Path, output_root: Path, model: str):
     return files
 
 
-def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str):
+def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str, stem: str = ""):
     job = JOBS[job_id]
     try:
         with RUN_LOCK:  # one separation at a time; others stay "queued"
             _current["job"] = job
             job.update(status="running", stage="separate", percent=0.0, started=time.time())
 
-            run_demucs(source_path, work_dir, model, device)
+            run_demucs(source_path, work_dir, model, device, stem)
             job.update(stage="saving", percent=100.0)
 
             stem_files = collect_stem_files(source_path, work_dir, model)
@@ -194,11 +199,17 @@ def separate(
     file: UploadFile = File(...),
     model: str = Form("htdemucs"),
     device: str = Form("cpu"),
+    stem: str = Form(""),
 ):
     if model not in ALLOWED_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
     if device not in ALLOWED_DEVICES:
         raise HTTPException(status_code=400, detail=f"Unknown device: {device}")
+    stem = (stem or "").strip().lower()
+    if stem and stem not in TWO_STEM_CHOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown stem: {stem}")
+    if stem in SIX_STEM_ONLY and model != "htdemucs_6s":
+        raise HTTPException(status_code=400, detail=f"'{stem}' needs the 6-stem model (htdemucs_6s).")
 
     job_id = uuid4().hex[:10]
     work_dir = Path(tempfile.mkdtemp(prefix="quicktune_"))
@@ -219,13 +230,14 @@ def separate(
         "percent": 0.0,
         "model": model,
         "device": device,
+        "stem": stem,
         "outputs": {},
         "error": None,
         "_total": 0,
         "_done": 0,
     }
     threading.Thread(
-        target=run_job, args=(job_id, source_path, work_dir, model, device), daemon=True
+        target=run_job, args=(job_id, source_path, work_dir, model, device, stem), daemon=True
     ).start()
     return {"status": "queued", "job_id": job_id, "model": model, "device": device}
 

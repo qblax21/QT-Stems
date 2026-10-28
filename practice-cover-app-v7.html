@@ -50,7 +50,8 @@
     <div class="row"><strong>1 · Pick a song</strong><span class="subtle">from this device</span></div>
     <div class="field"><label for="audioFile">Audio file</label><input id="audioFile" type="file" accept="audio/*" /></div>
     <div class="row"><strong>2 · Choose a model</strong></div>
-    <div class="grid3" id="modelGrid"><button class="mode active" data-model="htdemucs">4 stems</button><button class="mode" data-model="htdemucs_6s">6 stems</button><button class="mode" data-model="mdx_extra">Vocals split</button></div>
+    <div class="grid3" id="modelGrid"><button class="mode active" data-model="htdemucs">4 stems</button><button class="mode" data-model="htdemucs_6s">6 stems</button><button class="mode" data-model="htdemucs_ft">4 stems HQ</button></div>
+    <div class="field"><label for="splitMode">What to split</label><select id="splitMode"><option value="">All stems</option><option value="guitar">Just guitar (guitar + backing)</option><option value="vocals">Just vocals (vocals + backing)</option><option value="drums">Just drums (drums + backing)</option><option value="bass">Just bass (bass + backing)</option><option value="piano">Just piano (piano + backing)</option></select></div>
     <div class="grid2" id="deviceGrid"><button class="mode active" data-device="cpu">CPU</button><button class="mode" data-device="cuda">GPU</button></div>
     <div class="note" id="backendSummary">htdemucs on CPU. Best free path, slowest option.</div>
     <button class="primary" id="runDemucsBtn">Split into stems</button>
@@ -259,7 +260,9 @@ function renderPipeline(reset){const host=$('jobList'); if(reset){stepPct.fill(0
   if(host.children.length!==steps.length){host.innerHTML=''; steps.forEach(s=>{const d=document.createElement('div'); d.className='job'; d.innerHTML=`<span class="dot"></span><div class="jobBody"><span>${s.label}</span><div class="bar"><i></i></div></div><span class="subtle jobPct">pending</span>`; host.appendChild(d);});}
   let total=0; steps.forEach((s,i)=>{const d=host.children[i]; const p=Math.max(0,Math.min(100,stepPct[i])); const done=p>=100; const live=!done&&i===stepActive; const indet=live&&stepIndet[i]; d.className=`job ${done?'done':live?'live':(stepActive>=0?'wait':'')}${indet?' indet':''}`.trim(); d.querySelector('.bar i').style.width=(indet?100:p)+'%'; d.querySelector('.jobPct').textContent=done?'done':live?(indet?'working…':Math.round(p)+'%'):'pending'; total+=s.w*p/100;});
   const overall=Math.round(total/steps.reduce((a,s)=>a+s.w,0)*100); $('overallRing').style.setProperty('--p',overall); $('overallRingText').textContent=overall+'%';}
-function syncBackendSummary(){$('backendSummary').textContent=`${selectedModel} on ${selectedDevice}. ${selectedDevice==='cpu'?'Best free path, slowest option.':'Faster if your machine has CUDA.'}`; $('settingsModel').textContent=selectedModel; $('settingsDevice').textContent=selectedDevice;}
+function effectiveModel(){const st=$('splitMode').value; return (st==='guitar'||st==='piano')?'htdemucs_6s':selectedModel;}
+const MODEL_NOTE={htdemucs:'vocals, drums, bass, other',htdemucs_6s:'adds guitar and piano (those two are the least clean)',htdemucs_ft:'same 4 stems, cleaner separation, about 4x slower',mdx_extra:'4 stems, alternative model'};
+function syncBackendSummary(){const m=effectiveModel(), st=$('splitMode').value; $('backendSummary').textContent=(st?`Two files: ${st} and the backing track. `:'')+`${m}: ${MODEL_NOTE[m]||''}. ${selectedDevice==='cpu'?'Running on CPU is slow.':'Running on your GPU.'}`+((m!==selectedModel)?' (6-stem model is used because guitar/piano need it.)':''); $('settingsModel').textContent=selectedModel; $('settingsDevice').textContent=selectedDevice;}
 
 /* ---------- player engine (Web Audio + AudioWorklet) ---------- */
 const engine={ac:null,node:null,ready:false,playing:false,dur:0,pos:0,posAt:0,rate:44100,ch:2,decoded:0,error:null,gen:0};
@@ -416,7 +419,7 @@ $('hydrateRetry').addEventListener('click',()=>{engine.error=null; for(const n o
 function setStemUrls(outputs){
   const base=backendBase();
   const absolutize=url=>{if(!url) return ''; if(url.startsWith('http://')||url.startsWith('https://')) return url; if(url.startsWith('/')) return `${base}${url}`; return `${base}/${url}`;};
-  const map={Vocals:absolutize(outputs.vocals||''),Drums:absolutize(outputs.drums||''),Bass:absolutize(outputs.bass||''),Guitar:absolutize(outputs.guitar||''),Piano:absolutize(outputs.piano||''),Other:absolutize(outputs.other||outputs.instrumental||'')};
+  const map={Vocals:absolutize(outputs.vocals||''),Drums:absolutize(outputs.drums||''),Bass:absolutize(outputs.bass||''),Guitar:absolutize(outputs.guitar||''),Piano:absolutize(outputs.piano||''),Other:absolutize(outputs.other||outputs.instrumental||Object.entries(outputs).find(([k])=>k.startsWith('no_'))?.[1]||'')};
   masterAudio.pause();
   Object.entries(map).forEach(([name,url])=>{stemState[name].url=url;});
   startHydration(map);
@@ -440,11 +443,11 @@ async function runDemucs(){const file=$('audioFile').files?.[0]; if(!file){alert
   const btn=$('runDemucsBtn'), note=$('jobNote'), badge=$('jobStatusBadge'); btn.disabled=true;
   try{
     renderPipeline(true); stepActive=0; renderPipeline(); badge.textContent='uploading'; note.textContent=`Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)...`;
-    fileName=file.name.replace(/\.[^/.]+$/,''); $('songTitle').textContent=fileName; $('songMeta').textContent=`Demucs ${selectedModel} · ${selectedDevice}`;
+    fileName=file.name.replace(/\.[^/.]+$/,''); $('songTitle').textContent=fileName; $('songMeta').textContent=`Demucs ${effectiveModel()} · ${selectedDevice}`;
     engineReset(); Object.keys(hydr).forEach(k=>delete hydr[k]); updateHydrationUI();
     if(objectUrl) URL.revokeObjectURL(objectUrl); objectUrl=URL.createObjectURL(file); masterAudio.src=objectUrl; masterAudio.muted=false; masterAudio.volume=1; masterAudio.load();
     buildWaveformFromFile(file).catch(()=>{});
-    const form=new FormData(); form.append('file',file); form.append('model',selectedModel); form.append('device',selectedDevice);
+    const form=new FormData(); form.append('file',file); const splitStem=$('splitMode').value, useModel=effectiveModel(); form.append('model',useModel); form.append('device',selectedDevice); if(splitStem){form.append('stem',splitStem); selectedTarget=splitStem[0].toUpperCase()+splitStem.slice(1);}
     const base=backendBase();
     const start=await uploadWithProgress(`${base}/api/demucs/separate`,form,p=>{stepPct[0]=p; renderPipeline();});
     badge.textContent='separating'; note.textContent='Splitting stems on your PC...';
@@ -503,7 +506,7 @@ $('audioFile').addEventListener('change',e=>{const file=e.target.files?.[0]; if(
 /* ---------- controls ---------- */
 document.querySelectorAll('#modelGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedModel=btn.dataset.model; document.querySelectorAll('#modelGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
 document.querySelectorAll('#deviceGrid .mode').forEach(btn=>btn.addEventListener('click',()=>{selectedDevice=btn.dataset.device; document.querySelectorAll('#deviceGrid .mode').forEach(b=>b.classList.toggle('active',b===btn)); syncBackendSummary();}));
-$('runDemucsBtn').addEventListener('click',runDemucs); $('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); $('checkHealthBtn').addEventListener('click',checkHealth);
+$('runDemucsBtn').addEventListener('click',runDemucs); $('splitMode').addEventListener('change',syncBackendSummary); $('openPracticeBtn').addEventListener('click',()=>showScreen('practice')); $('checkHealthBtn').addEventListener('click',checkHealth);
 $('playBtn').addEventListener('click',()=>{if(isPlaying()) transportPause(); else transportPlay();});
 $('back5').addEventListener('click',()=>transportSeek(curTime()-5)); $('fwd5').addEventListener('click',()=>transportSeek(curTime()+5)); $('toA').addEventListener('click',()=>transportSeek(loopA*curDur())); $('toB').addEventListener('click',()=>transportSeek(loopB*curDur()));
 $('setA').addEventListener('click',()=>{const d=curDur(); if(!d) return; loopA=Math.min(loopB-.01,Math.max(0,curTime()/d)); updateLoopUI();}); $('setB').addEventListener('click',()=>{const d=curDur(); if(!d) return; loopB=Math.max(loopA+.01,Math.min(1,curTime()/d)); updateLoopUI();}); $('loopToggle').addEventListener('click',e=>{loopEnabled=!loopEnabled; e.currentTarget.textContent=loopEnabled?'Loop On':'Loop Off'; engineLoop();});
