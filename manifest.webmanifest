@@ -1,0 +1,16 @@
+{
+  "name": "QT Stems",
+  "short_name": "QT Stems",
+  "description": "Split songs into stems, mute your part and practice.",
+  "start_url": "practice-cover-app-v7.html",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#120e1a",
+  "theme_color": "#512888",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "logo.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

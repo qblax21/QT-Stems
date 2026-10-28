@@ -55,6 +55,8 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Set `QT_PYTHON` to y
 - On plain `http` (a phone on your LAN) browsers hide AudioWorklet, so the same mixer runs on a `ScriptProcessorNode` instead. The line under "Stem mixer" shows which one is active.
 - Saved sessions (song, loop, speed, mix, notes) and the last song you practiced are kept in the browser's local storage, with stem addresses stored relative to the backend so they work from the PC, LAN or Tailscale. The theme is purple and silver, with light and dark modes (follows your system, toggle in the header).
 
+- It is installable: on iPhone use Share, then Add to Home Screen, and it opens full screen with the QT Stems icon (`icons/` holds the PNGs, `manifest.webmanifest` the Android/Chrome install info).
+
 ## Security note
 This is a local/LAN tool. There is no authentication, upload limit or job queue, and `python -m http.server` serves the whole folder. Do not expose it to the public internet as-is. Separated stems are saved under `stems/`.
 
