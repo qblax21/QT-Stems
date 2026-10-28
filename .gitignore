@@ -8,3 +8,4 @@ backend_log.txt
 *.log
 .claude/
 web_log.txt
+run-servers.log

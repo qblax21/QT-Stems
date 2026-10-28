@@ -10,6 +10,7 @@ if (-not $py) {
     $py = if (Test-Path $conda) { $conda } else { 'python' }
 }
 
+Add-Content (Join-Path $root 'run-servers.log') "$(Get-Date) run-servers started (python: $py)"
 Set-Content -Path (Join-Path $root 'backend_log.txt') -Value "run-servers started $(Get-Date)"
 
 $loop = {
@@ -29,4 +30,9 @@ $jobs = @(
     Start-Job -ScriptBlock $loop -ArgumentList $py, $root, 8000, @('-m', 'uvicorn', 'app:app', '--host', '0.0.0.0', '--port', '8000'), (Join-Path $root 'backend_log.txt')
     Start-Job -ScriptBlock $loop -ArgumentList $py, $root, 5500, @('-m', 'http.server', '5500', '--bind', '0.0.0.0'), (Join-Path $root 'web_log.txt')
 )
-Wait-Job $jobs | Out-Null
+try {
+    Wait-Job $jobs | Out-Null
+    Add-Content (Join-Path $root 'run-servers.log') "$(Get-Date) jobs ended: $($jobs.State -join ', ')"
+} finally {
+    Add-Content (Join-Path $root 'run-servers.log') "$(Get-Date) run-servers stopping"
+}
