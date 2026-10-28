@@ -36,6 +36,7 @@
     .mbar{height:3px;margin-top:.3rem;border-radius:999px;background:color-mix(in oklab,var(--text) 10%,transparent);overflow:hidden}.mbar i{display:block;height:100%;width:0;background:var(--primary);transition:width .25s ease}
     body.hydrating #practiceScreen>:not(.hydrate):not(:first-child){filter:grayscale(1);opacity:.4;pointer-events:none;transition:filter .3s,opacity .3s} #practiceScreen>*{transition:filter .3s,opacity .3s}
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
+    .offline{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:color-mix(in oklab,var(--warning) 22%,var(--surface));color:var(--text);font-size:.8rem;border-bottom:1px solid color-mix(in oklab,var(--warning) 50%,transparent)}.offline button{flex:none;padding:.4rem .8rem;border-radius:10px;background:var(--offset);font-weight:700;font-size:.78rem}
     .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
     @media (max-width:540px){.app{padding:0}.phone{height:100dvh;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
@@ -44,7 +45,8 @@
 </head>
 <body>
 <main class="app"><section class="phone">
-<header class="topbar"><div class="brand"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="qtBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6b3fa8"/><stop offset="1" stop-color="#3a1b66"/></linearGradient><linearGradient id="qtSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f4f6"/><stop offset="1" stop-color="#b3b5b9"/></linearGradient></defs><rect x="2" y="2" width="96" height="96" rx="24" fill="url(#qtBg)" stroke="#c9cbce" stroke-width="2.5"/><g fill="#c9cbce" opacity=".22"><rect x="11" y="62" width="6" height="22" rx="3"/><rect x="21" y="52" width="6" height="32" rx="3"/><rect x="73" y="52" width="6" height="32" rx="3"/><rect x="83" y="62" width="6" height="22" rx="3"/></g><g fill="url(#qtSilver)"><ellipse cx="34" cy="68" rx="10.5" ry="7.8" transform="rotate(-20 34 68)"/><ellipse cx="66" cy="60" rx="10.5" ry="7.8" transform="rotate(-20 66 60)"/><rect x="39" y="30" width="5.5" height="38" rx="1.5"/><rect x="71" y="22" width="5.5" height="38" rx="1.5"/><polygon points="39,30 76.5,22 76.5,32 39,40"/></g><path d="M14 84 Q26 76 38 84 T62 84 T86 84" fill="none" stroke="#c9cbce" stroke-width="3" stroke-linecap="round" opacity=".7"/></svg><div><strong>QT <b>Stems</b></strong><span>split · mute · practice</span></div></div><button class="iconbtn" id="themeBtn" aria-label="Toggle light/dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></header>
+<div class="topwrap"><header class="topbar"><div class="brand"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="qtBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6b3fa8"/><stop offset="1" stop-color="#3a1b66"/></linearGradient><linearGradient id="qtSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f4f6"/><stop offset="1" stop-color="#b3b5b9"/></linearGradient></defs><rect x="2" y="2" width="96" height="96" rx="24" fill="url(#qtBg)" stroke="#c9cbce" stroke-width="2.5"/><g fill="#c9cbce" opacity=".22"><rect x="11" y="62" width="6" height="22" rx="3"/><rect x="21" y="52" width="6" height="32" rx="3"/><rect x="73" y="52" width="6" height="32" rx="3"/><rect x="83" y="62" width="6" height="22" rx="3"/></g><g fill="url(#qtSilver)"><ellipse cx="34" cy="68" rx="10.5" ry="7.8" transform="rotate(-20 34 68)"/><ellipse cx="66" cy="60" rx="10.5" ry="7.8" transform="rotate(-20 66 60)"/><rect x="39" y="30" width="5.5" height="38" rx="1.5"/><rect x="71" y="22" width="5.5" height="38" rx="1.5"/><polygon points="39,30 76.5,22 76.5,32 39,40"/></g><path d="M14 84 Q26 76 38 84 T62 84 T86 84" fill="none" stroke="#c9cbce" stroke-width="3" stroke-linecap="round" opacity=".7"/></svg><div><strong>QT <b>Stems</b></strong><span>split · mute · practice</span></div></div><button class="iconbtn" id="themeBtn" aria-label="Toggle light/dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></header>
+<div class="offline hidden" id="offline"><span id="offlineText"></span><button id="offlineRetry">Retry</button></div></div>
 <section class="screen" id="importScreen">
   <div class="hero"><h1>Split a song. Play your part.</h1><p>Upload a track, separate it into stems on your own computer, then mute the instrument you want to play.</p></div>
   <div class="card stack resumeCard hidden" id="resumeCard"><div class="row"><strong>Continue where you left off</strong><span class="subtle" id="resumeWhen"></span></div><div id="resumeTitle" style="font-weight:700;overflow-wrap:anywhere"></div><button class="primary" id="resumeBtn">Continue practicing</button></div>
@@ -87,6 +89,16 @@
   <div class="card stack">
     <div class="row"><strong>Speed</strong><span class="subtle">pitch stays the same</span></div>
     <div class="speedRow"><button class="secondary" id="speedDown">− 5%</button><strong id="speedValue">100%</strong><button class="secondary" id="speedUp">+ 5%</button></div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Speed trainer</strong><button class="toggle" id="trainerToggle" aria-label="Raise the speed automatically each loop"><span></span></button></div>
+    <div class="grid3"><div class="field"><label for="trStep">Raise by</label><select id="trStep"><option value="2">2%</option><option value="5" selected>5%</option><option value="10">10%</option></select></div><div class="field"><label for="trEvery">Every</label><select id="trEvery"><option value="1">1 loop</option><option value="2" selected>2 loops</option><option value="4">4 loops</option><option value="8">8 loops</option></select></div><div class="field"><label for="trMax">Up to</label><select id="trMax"><option value="80">80%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="110">110%</option><option value="125">125%</option></select></div></div>
+    <div class="note" id="trainerNote">Off. Turn it on, set a loop, and start slow: the speed climbs each time the loop repeats.</div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Metronome</strong><span class="subtle">independent click</span></div>
+    <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
+    <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
   </div>
   <div class="card stack">
     <div class="row"><strong>Part to play</strong><button class="toggle" id="coverToggle" aria-label="Mute the part to play"><span></span></button></div>
@@ -345,7 +357,7 @@ async function prepareEngine(gen){
     const fmt=pickFormat(dur,names.length); engine.rate=fmt.rate; engine.ch=fmt.ch;
     let ac; try{ac=new (window.AudioContext||window.webkitAudioContext)({sampleRate:fmt.rate,latencyHint:'playback'});}catch(e){ac=new (window.AudioContext||window.webkitAudioContext)(); engine.rate=ac.sampleRate;}
     const node=await makePlayerNode(ac);
-    node.port.onmessage=e=>{const m=e.data; if(m.type==='pos'){engine.pos=m.t; engine.posAt=performance.now();} else if(m.type==='wrap'){loopReps++; $('repsCount').textContent=`${loopReps}x`;} else if(m.type==='ended'){engine.playing=false; engine.pos=engine.dur; setPlayLabel(false);}};
+    node.port.onmessage=e=>{const m=e.data; if(m.type==='pos'){engine.pos=m.t; engine.posAt=performance.now();} else if(m.type==='wrap'){loopReps++; $('repsCount').textContent=`${loopReps}x`; trainerStep();} else if(m.type==='ended'){engine.playing=false; engine.pos=engine.dur; setPlayLabel(false);}};
     if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
     engineReset(); engine.ac=ac; engine.node=node; engine.rate=ac.sampleRate; engine.error=null;
     const peaks=new Float32Array(600); let maxLen=0;
@@ -390,6 +402,26 @@ function stemKeys(){return Object.keys(stemState)}
 function renderStemList(){const host=$('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
 function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); const g={}; for(const [name,s] of Object.entries(stemState)){let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode&&name===selectedTarget) vol=0;} g[name]=vol;} engine.post({type:'gains',g});}
 function setSpeed(v){speed=v; masterAudio.playbackRate=speed; if(engine.ready){engine.pos=curTime(); engine.posAt=performance.now(); engine.post({type:'rate',r:speed});} $('speedValue').textContent=`${Math.round(speed*100)}%`; $('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;}
+
+/* ---------- speed trainer + metronome ---------- */
+const setToggle=(btn,on)=>{btn.style.background=on?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; btn.querySelector('span').style.transform=on?'translateX(24px)':'translateX(0)'; btn.setAttribute('aria-pressed',on);};
+const trainer={on:false}; setToggle($('trainerToggle'),false);
+function trainerNote(){const a=Number($('trStep').value), n=Number($('trEvery').value), m=Number($('trMax').value); $('trainerNote').textContent=trainer.on?`On: +${a}% every ${n===1?'loop':n+' loops'} until ${m}%. Needs the loop switched on.`:'Off. Turn it on, set a loop, and start slow: the speed climbs each time the loop repeats.';}
+function trainerStep(){ // called on every loop wrap
+  if(!trainer.on) return; const a=Number($('trStep').value), n=Number($('trEvery').value), m=Number($('trMax').value)/100;
+  if(loopReps%n!==0||speed>=m-1e-6) return; setSpeed(Math.min(1.5,Math.min(m,Math.round((speed+a/100)*100)/100)));}
+$('trainerToggle').addEventListener('click',()=>{trainer.on=!trainer.on; setToggle($('trainerToggle'),trainer.on); trainerNote();});
+['trStep','trEvery','trMax'].forEach(id=>$(id).addEventListener('change',trainerNote));
+const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[]};
+function setBpm(v){metro.bpm=Math.max(30,Math.min(300,Math.round(v))); $('bpmValue').textContent=`${metro.bpm} BPM`;}
+function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08);}
+function metroTick(){while(metro.next<metro.ac.currentTime+.12){metroClick(metro.next,metro.beat%4===0); metro.next+=60/metro.bpm; metro.beat++;}}
+function metroToggle(){
+  if(metro.on){clearInterval(metro.timer); metro.on=false; $('metroBtn').textContent='Start click'; return;}
+  if(!metro.ac) metro.ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  metro.ac.resume(); metro.on=true; metro.beat=0; metro.next=metro.ac.currentTime+.06; metro.timer=setInterval(metroTick,25); metroTick(); $('metroBtn').textContent='Stop click';}
+$('metroBtn').addEventListener('click',metroToggle); $('bpmDown').addEventListener('click',()=>setBpm(metro.bpm-1)); $('bpmUp').addEventListener('click',()=>setBpm(metro.bpm+1));
+$('tapBtn').addEventListener('click',()=>{const now=performance.now(); if(metro.taps.length&&now-metro.taps[metro.taps.length-1]>2000) metro.taps=[]; metro.taps.push(now); metro.taps=metro.taps.slice(-7); if(metro.taps.length>=2){const iv=(metro.taps[metro.taps.length-1]-metro.taps[0])/(metro.taps.length-1); setBpm(60000/iv);}});
 
 /* ---------- stems: download, then hand to the player ---------- */
 let hydrateGen=0;
@@ -485,7 +517,7 @@ function relUrl(u){const b=backendBase(); return u&&u.startsWith(b+'/')?u.slice(
 function snapshot(){
   const outputs={}; for(const [n,s] of Object.entries(stemState)) if(s.url) outputs[n.toLowerCase()]=relUrl(s.url);
   if(!Object.keys(outputs).length) return null;
-  return {title:`${fileName} — ${selectedTarget}`,fileName,model:selectedModel,device:selectedDevice,target:selectedTarget,coverMode,speed,dur:curDur()||0,
+  return {title:`${fileName} — ${selectedTarget}`,fileName,model:selectedModel,device:selectedDevice,target:selectedTarget,coverMode,speed,bpm:metro.bpm,dur:curDur()||0,
     loop:{a:loopA,b:loopB,enabled:loopEnabled},mix:Object.fromEntries(Object.entries(stemState).map(([n,s])=>[n,{volume:s.volume,mute:s.mute,solo:s.solo}])),
     outputs,notes:$('notes').value.trim(),savedAt:Date.now()};}
 function applyCoverUI(){$('coverToggle').style.background=coverMode?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; document.querySelector('#coverToggle span').style.transform=coverMode?'translateX(24px)':'translateX(0)';}
@@ -497,7 +529,7 @@ function restoreSnapshot(s){
   coverMode=s.coverMode!==false; applyCoverUI(); selectedTarget=s.target||selectedTarget;
   loopA=Number(s.loop&&s.loop.a)||0; loopB=s.loop&&s.loop.b>loopA?Number(s.loop.b):1; loopEnabled=!s.loop||s.loop.enabled!==false; $('loopToggle').textContent=loopEnabled?'Loop On':'Loop Off'; loopReps=0; $('repsCount').textContent='0x';
   const sp=typeof s.speed==='string'?parseFloat(s.speed)/100:Number(s.speed); setSpeed(sp>=.5&&sp<=1.5?sp:1);
-  $('notes').value=s.notes||''; waveformData=null;
+  setBpm(Number(s.bpm)||100); $('notes').value=s.notes||''; waveformData=null;
   setStemUrls(outputs); showScreen('practice');}
 const newId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 // Sessions live on the PC (so phone and computer share them) with a copy in this browser as a fallback.
@@ -573,8 +605,21 @@ waveCanvas.addEventListener('pointerdown',e=>{if(!curDur()) return; scrubbing=tr
 waveCanvas.addEventListener('pointermove',e=>{if(scrubbing) scrubTo(e,false);});
 waveCanvas.addEventListener('pointerup',e=>{if(!scrubbing) return; scrubbing=false; scrubTo(e,true);}); waveCanvas.addEventListener('pointercancel',()=>{scrubbing=false;});
 $('markerA').addEventListener('pointerdown',e=>{dragMode='A'; e.currentTarget.setPointerCapture(e.pointerId)}); $('markerB').addEventListener('pointerdown',e=>{dragMode='B'; e.currentTarget.setPointerCapture(e.pointerId)}); waveWrap.addEventListener('pointermove',e=>{if(!dragMode) return; const ratio=pointerToRatio(e.clientX); if(dragMode==='A') loopA=Math.min(loopB-.01,ratio); if(dragMode==='B') loopB=Math.max(loopA+.01,ratio); updateLoopUI();}); waveWrap.addEventListener('pointerup',()=>dragMode=null); waveWrap.addEventListener('pointerleave',()=>dragMode=null);
-if(location.protocol.startsWith('http')&&!['localhost','127.0.0.1',''].includes(location.hostname)) $('backendBase').value=`http://${location.hostname}:8000`;
-syncSessions();
+/* ---------- is the PC reachable? ---------- */
+let backendUp=null;
+async function pingBackend(){
+  if(document.hidden&&backendUp!==null) return;
+  const ctl=new AbortController(), timer=setTimeout(()=>ctl.abort(),5000); let up=false;
+  try{const r=await rawFetch(`${backendBase()}/api/health`,{signal:ctl.signal}); up=r.ok;}catch{} clearTimeout(timer);
+  $('offline').classList.toggle('hidden',up);
+  if(!up) $('offlineText').textContent=`Can't reach your PC at ${backendBase()}. Check that it is on, awake and online. After a restart the servers come back a few minutes after you log in.`;
+  if(up&&backendUp===false){syncSessions(); if(!screens.library.classList.contains('hidden')) loadLibrary();}
+  backendUp=up;}
+$('offlineRetry').addEventListener('click',pingBackend); setInterval(pingBackend,15000); document.addEventListener('visibilitychange',()=>{if(!document.hidden) pingBackend();});
+// Over HTTPS (Tailscale Serve) the backend is published on :8443; plain http uses :8000 directly.
+if(location.protocol==='https:') $('backendBase').value=`https://${location.hostname}:8443`;
+else if(location.protocol==='http:'&&!['localhost','127.0.0.1',''].includes(location.hostname)) $('backendBase').value=`http://${location.hostname}:8000`;
+syncSessions(); pingBackend();
 renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar'); requestAnimationFrame(frame);
 </script>
 </body>
