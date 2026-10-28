@@ -37,6 +37,7 @@
     body.hydrating #practiceScreen>:not(.hydrate):not(:first-child){filter:grayscale(1);opacity:.4;pointer-events:none;transition:filter .3s,opacity .3s} #practiceScreen>*{transition:filter .3s,opacity .3s}
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
     .offline{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:color-mix(in oklab,var(--warning) 22%,var(--surface));color:var(--text);font-size:.8rem;border-bottom:1px solid color-mix(in oklab,var(--warning) 50%,transparent)}.offline button{flex:none;padding:.4rem .8rem;border-radius:10px;background:var(--offset);font-weight:700;font-size:.78rem}
+    .chips{display:flex;flex-wrap:wrap;gap:.45rem}.chip2{display:inline-flex;align-items:stretch;border-radius:999px;background:var(--offset);border:1px solid transparent;overflow:hidden}.chip2.active{background:var(--soft);border-color:color-mix(in oklab,var(--primary) 35%,transparent)}.chip2 button{padding:.5rem .7rem;font-size:.82rem;font-weight:700}.chip2 button+button{padding-left:.5rem;padding-right:.7rem;color:var(--muted);border-left:1px solid color-mix(in oklab,var(--text) 10%,transparent)}.chips .subtle{font-size:.82rem}
     .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
     @media (max-width:540px){.app{padding:0}.phone{height:100dvh;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
@@ -87,8 +88,16 @@
     <div class="transport"><button id="back5">⟲5</button><button id="toA">To A</button><button class="play" id="playBtn">▶</button><button id="toB">To B</button><button id="fwd5">5⟳</button></div>
   </div>
   <div class="card stack">
+    <div class="row"><strong>Sections</strong><button class="smallBtn" id="markSave">+ Save loop</button></div>
+    <div class="chips" id="markList"></div>
+  </div>
+  <div class="card stack">
     <div class="row"><strong>Speed</strong><span class="subtle">pitch stays the same</span></div>
     <div class="speedRow"><button class="secondary" id="speedDown">− 5%</button><strong id="speedValue">100%</strong><button class="secondary" id="speedUp">+ 5%</button></div>
+  </div>
+  <div class="card stack">
+    <div class="row"><strong>Key</strong><span class="subtle">semitones · speed stays the same</span></div>
+    <div class="speedRow"><button class="secondary" id="keyDown">− 1 st</button><strong id="keyValue">Original</strong><button class="secondary" id="keyUp">+ 1 st</button></div>
   </div>
   <div class="card stack">
     <div class="row"><strong>Speed trainer</strong><button class="toggle" id="trainerToggle" aria-label="Raise the speed automatically each loop"><span></span></button></div>
@@ -125,7 +134,7 @@ class QTPlayer extends AudioWorkletProcessor {
     this.gm = {};                 // name -> target gain (kept across commit)
     this.names = []; this.Ls = []; this.Rs = [];
     this.g = new Float32Array(0); this.t = new Float32Array(0);
-    this.len = 0; this.pos = 0; this.playing = false; this.rate = 1;
+    this.len = 0; this.pos = 0; this.playing = false; this.rate = 1; this.speed = 1; this.pit = 1; this.lastL = []; this.lastR = [];
     this.loop = false; this.la = 0; this.lb = 0; this.tick = 0;
     this.H = Math.max(64, Math.round(sampleRate * 0.0116));
     this.W = 2 * this.H; this.SR = this.H >> 1;
@@ -157,25 +166,34 @@ class QTPlayer extends AudioWorkletProcessor {
       case 'play': this.playing = true; break;
       case 'pause': this.playing = false; this.port.postMessage({ type: 'pos', t: this.curPos() / sampleRate }); break;
       case 'seek': this.pos = Math.max(0, Math.min(this.len, Math.floor(m.t * sampleRate))); this.wsReset(this.pos); break;
-      case 'rate': {
-        const old = this.rate, r = m.r;
-        if (old === 1 && r !== 1) this.wsReset(this.pos);
-        else if (old !== 1 && r === 1) this.pos = Math.min(this.len, Math.floor(this.curPos()));
-        this.rate = r; break;
-      }
+      case 'rate': this.retime(m.r, this.pit); break;
+      case 'pitch': this.retime(this.speed, m.p); break;
       case 'loop': this.loop = !!m.on; this.la = Math.round(m.a * sampleRate); this.lb = Math.round(m.b * sampleRate); break;
     }
   }
+  // Tempo = speed. Pitch shift is done by time-stretching to speed/pitch (pitch unchanged) and then
+  // reading that stream back `pitch` times faster, which restores the tempo and moves the pitch.
+  retime(speed, pit) {
+    const wasDirect = this.speed === 1 && this.pit === 1;
+    this.speed = speed; this.pit = pit; this.rate = speed / pit;
+    const nowDirect = speed === 1 && pit === 1;
+    if (wasDirect && !nowDirect) this.wsReset(this.pos);
+    else if (!wasDirect && nowDirect) this.pos = Math.min(this.len, Math.floor(this.curPos()));
+  }
   wsReset(p) {
-    this.aPos = p; this.gPos = p; this.prevSel = -1; this.outRead = this.H;
+    this.aPos = p; this.gPos = p; this.prevSel = -1; this.outRead = this.H - 1;
     for (const a of this.accL) a.fill(0);
     for (const a of this.accR) a.fill(0);
+    this.lastL = this.names.map(() => 0); this.lastR = this.names.map(() => 0);
   }
-  curPos() { return Math.min(this.len, this.rate === 1 ? this.pos : this.gPos + this.outRead * this.rate); }
+  curPos() {
+    const direct = this.speed === 1 && this.pit === 1;
+    return Math.min(this.len, direct ? this.pos : this.gPos + Math.max(0, this.outRead) * this.rate);
+  }
   process(_inputs, outputs) {
     const o = outputs[0], L = o[0], R = o[1] || o[0], n = L.length;
     if (!this.playing || !this.names.length) return true;
-    if (this.rate === 1) this.direct(L, R, n); else this.stretch(L, R, n);
+    if (this.speed === 1 && this.pit === 1) this.direct(L, R, n); else this.stretch(L, R, n);
     this.tick += n;
     if (this.tick >= 1300) { this.tick = 0; this.port.postMessage({ type: 'pos', t: this.curPos() / sampleRate }); }
     return true;
@@ -197,17 +215,19 @@ class QTPlayer extends AudioWorkletProcessor {
     }
   }
   stretch(L, R, n) {
-    const S = this.names.length, H = this.H, g = this.g, t = this.t, accL = this.accL, accR = this.accR;
+    const S = this.names.length, H = this.H, g = this.g, t = this.t, accL = this.accL, accR = this.accR, step = this.pit;
     for (let i = 0; i < n; i++) {
-      if (this.outRead >= H) {
+      // Samples [0, H) of the overlap-add buffer are complete; interpolating needs index+1 inside that range.
+      if (this.outRead >= H - 1) {
         if (!this.grain()) { this.playing = false; this.port.postMessage({ type: 'ended' }); return; }
       }
-      const k = this.outRead++; let l = 0, r = 0;
+      const k = Math.floor(this.outRead), f = this.outRead - k; let l = 0, r = 0;
       for (let s = 0; s < S; s++) {
-        const gs = g[s] += (t[s] - g[s]) * 0.01;
-        l += accL[s][k] * gs; r += accR[s][k] * gs;
+        const gs = g[s] += (t[s] - g[s]) * 0.01, aL = accL[s], aR = accR[s];
+        const l0 = k < 0 ? this.lastL[s] : aL[k], r0 = k < 0 ? this.lastR[s] : aR[k];
+        l += (l0 + (aL[k + 1] - l0) * f) * gs; r += (r0 + (aR[k + 1] - r0) * f) * gs;
       }
-      L[i] = l; R[i] = r;
+      L[i] = l; R[i] = r; this.outRead += step;
     }
   }
   monoAt(i) {
@@ -219,10 +239,11 @@ class QTPlayer extends AudioWorkletProcessor {
   grain() {
     const H = this.H, W = this.W, S = this.names.length, rate = this.rate;
     for (let s = 0; s < S; s++) {
+      this.lastL[s] = this.accL[s][H - 1]; this.lastR[s] = this.accR[s][H - 1];
       this.accL[s].copyWithin(0, H); this.accL[s].fill(0, W - H);
       this.accR[s].copyWithin(0, H); this.accR[s].fill(0, W - H);
     }
-    this.outRead = 0;
+    this.outRead -= H; // keep the fractional read position across grains
     if (this.loop && this.lb > this.la && this.aPos >= this.lb) {
       this.aPos = this.la + (this.aPos - this.lb); this.prevSel = -1; this.port.postMessage({ type: 'wrap' });
     }
@@ -378,14 +399,14 @@ async function prepareEngine(gen){
     const pk=Math.max(...peaks,1e-6); waveformData=Array.from(peaks,v=>v/pk);
     node.port.postMessage({type:'commit'});
     engine.ready=true; engine.pos=0; engine.posAt=performance.now();
-    engine.post({type:'rate',r:speed}); updateMix(); engineLoop();
+    engine.post({type:'rate',r:speed}); engine.post({type:'pitch',p:Math.pow(2,pitchSteps/12)}); updateMix(); engineLoop();
     $('timeDur').textContent=formatTime(engine.dur); updateLoopUI(); updatePlayhead();
     $('diag').textContent=`player: ${engine.mode} ·${(engine.rate/1000).toFixed(engine.rate%1000?1:0)} kHz ${fmt.ch===1?'mono':'stereo'} · ${names.length} stems · ~${Math.round(engine.dur*engine.rate*4*fmt.ch*names.length/1e6)} MB`;
   }catch(e){engine.error=e&&e.message||String(e); console.error(e);}
   updateHydrationUI();}
 
 /* ---------- waveform / loop UI ---------- */
-function updateLoopUI(){const dur=curDur(); const a=loopA*dur,b=Math.max(loopB*dur,a+.2); $('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; $('markerA').style.left=`${loopA*100}%`; $('markerB').style.left=`${loopB*100}%`; drawWaveform(); engineLoop();}
+function updateLoopUI(){const dur=curDur(); if(typeof renderMarks==='function'&&$('markList').children.length) renderMarks(); const a=loopA*dur,b=Math.max(loopB*dur,a+.2); $('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; $('markerA').style.left=`${loopA*100}%`; $('markerB').style.left=`${loopB*100}%`; drawWaveform(); engineLoop();}
 function updatePlayhead(){const dur=curDur(), t=curTime(); const p=dur?(t/dur):0; $('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; $('timeNow').textContent=formatTime(t);}
 function frame(){if(isPlaying()&&!scrubbing){updatePlayhead(); if(!engine.ready) masterLoopCheck();} requestAnimationFrame(frame);}
 function masterLoopCheck(){const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){masterAudio.currentTime=a; loopReps+=1; $('repsCount').textContent=`${loopReps}x`;}}
@@ -402,6 +423,22 @@ function stemKeys(){return Object.keys(stemState)}
 function renderStemList(){const host=$('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
 function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); const g={}; for(const [name,s] of Object.entries(stemState)){let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode&&name===selectedTarget) vol=0;} g[name]=vol;} engine.post({type:'gains',g});}
 function setSpeed(v){speed=v; masterAudio.playbackRate=speed; if(engine.ready){engine.pos=curTime(); engine.posAt=performance.now(); engine.post({type:'rate',r:speed});} $('speedValue').textContent=`${Math.round(speed*100)}%`; $('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;}
+
+/* ---------- key (pitch) ---------- */
+let pitchSteps=0; // semitones, -6..+6
+function setPitch(v){pitchSteps=Math.max(-6,Math.min(6,Math.round(v))); $('keyValue').textContent=pitchSteps?`${pitchSteps>0?'+':''}${pitchSteps} st`:'Original'; engine.post({type:'pitch',p:Math.pow(2,pitchSteps/12)});}
+$('keyDown').addEventListener('click',()=>setPitch(pitchSteps-1)); $('keyUp').addEventListener('click',()=>setPitch(pitchSteps+1)); $('keyValue').addEventListener('click',()=>setPitch(0));
+
+/* ---------- named loop sections ---------- */
+let marks=[];
+function renderMarks(){
+  const host=$('markList'); host.innerHTML=''; const dur=curDur();
+  if(!marks.length){const e=document.createElement('span'); e.className='subtle'; e.textContent='Set a loop with A and B, then save it here (for example "solo" or "chorus").'; host.appendChild(e); return;}
+  marks.forEach((m,i)=>{const chip=document.createElement('span'); chip.className='chip2'+((Math.abs(m.a-loopA)<.001&&Math.abs(m.b-loopB)<.001)?' active':'');
+    const go=document.createElement('button'); go.textContent=dur?`${m.name} ${formatTime(m.a*dur)}`:m.name; go.addEventListener('click',()=>{loopA=m.a; loopB=m.b; loopEnabled=true; $('loopToggle').textContent='Loop On'; updateLoopUI(); transportSeek(m.a*(curDur()||0)); renderMarks();});
+    const del=document.createElement('button'); del.textContent='×'; del.setAttribute('aria-label',`Remove ${m.name}`); del.addEventListener('click',()=>{marks.splice(i,1); renderMarks();});
+    chip.append(go,del); host.appendChild(chip);});}
+$('markSave').addEventListener('click',()=>{if(!curDur()) return; const name=(prompt('Name this loop',`Section ${marks.length+1}`)||'').trim(); if(!name) return; marks.push({name:name.slice(0,24),a:loopA,b:loopB}); renderMarks();}); renderMarks();
 
 /* ---------- speed trainer + metronome ---------- */
 const setToggle=(btn,on)=>{btn.style.background=on?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; btn.querySelector('span').style.transform=on?'translateX(24px)':'translateX(0)'; btn.setAttribute('aria-pressed',on);};
@@ -517,7 +554,7 @@ function relUrl(u){const b=backendBase(); return u&&u.startsWith(b+'/')?u.slice(
 function snapshot(){
   const outputs={}; for(const [n,s] of Object.entries(stemState)) if(s.url) outputs[n.toLowerCase()]=relUrl(s.url);
   if(!Object.keys(outputs).length) return null;
-  return {title:`${fileName} — ${selectedTarget}`,fileName,model:selectedModel,device:selectedDevice,target:selectedTarget,coverMode,speed,bpm:metro.bpm,dur:curDur()||0,
+  return {title:`${fileName} — ${selectedTarget}`,fileName,model:selectedModel,device:selectedDevice,target:selectedTarget,coverMode,speed,pitch:pitchSteps,bpm:metro.bpm,marks,dur:curDur()||0,
     loop:{a:loopA,b:loopB,enabled:loopEnabled},mix:Object.fromEntries(Object.entries(stemState).map(([n,s])=>[n,{volume:s.volume,mute:s.mute,solo:s.solo}])),
     outputs,notes:$('notes').value.trim(),savedAt:Date.now()};}
 function applyCoverUI(){$('coverToggle').style.background=coverMode?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; document.querySelector('#coverToggle span').style.transform=coverMode?'translateX(24px)':'translateX(0)';}
@@ -529,7 +566,7 @@ function restoreSnapshot(s){
   coverMode=s.coverMode!==false; applyCoverUI(); selectedTarget=s.target||selectedTarget;
   loopA=Number(s.loop&&s.loop.a)||0; loopB=s.loop&&s.loop.b>loopA?Number(s.loop.b):1; loopEnabled=!s.loop||s.loop.enabled!==false; $('loopToggle').textContent=loopEnabled?'Loop On':'Loop Off'; loopReps=0; $('repsCount').textContent='0x';
   const sp=typeof s.speed==='string'?parseFloat(s.speed)/100:Number(s.speed); setSpeed(sp>=.5&&sp<=1.5?sp:1);
-  setBpm(Number(s.bpm)||100); $('notes').value=s.notes||''; waveformData=null;
+  setPitch(Number(s.pitch)||0); marks=Array.isArray(s.marks)?s.marks.filter(m=>m&&typeof m.name==='string'&&m.b>m.a):[]; renderMarks(); setBpm(Number(s.bpm)||100); $('notes').value=s.notes||''; waveformData=null;
   setStemUrls(outputs); showScreen('practice');}
 const newId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 // Sessions live on the PC (so phone and computer share them) with a copy in this browser as a fallback.
