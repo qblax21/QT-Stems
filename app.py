@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -13,7 +14,8 @@ import traceback
 
 from fastapi import FastAPI, File, Form, Request, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quick Tune Demucs Backend")
@@ -369,6 +371,71 @@ def delete_song(song_id: str):
         f.unlink(missing_ok=True)
     JOBS.pop(song_id, None)
     return {"deleted": song_id}
+
+
+def _tempo_chain(t: float):
+    """atempo only accepts 0.5-2.0 per stage, so split larger changes into several stages."""
+    stages = []
+    while t > 2.0:
+        stages.append(2.0); t /= 2.0
+    while t < 0.5:
+        stages.append(0.5); t /= 0.5
+    stages.append(t)
+    return ",".join(f"atempo={s:.5f}" for s in stages)
+
+
+@app.post("/api/export")
+def export_mix(payload: dict):
+    """Render the current mix (per-stem gains, speed, key) to an MP3 so it can be saved or shared."""
+    song_id = str(payload.get("song_id", ""))
+    song_dir = STEMS_DIR / song_id
+    if not JOB_ID_RE.match(song_id) or not song_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Unknown song")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise HTTPException(status_code=500, detail="ffmpeg is not installed on the PC.")
+    try:
+        speed = min(2.0, max(0.5, float(payload.get("speed", 1.0))))
+        semis = min(12.0, max(-12.0, float(payload.get("pitch", 0.0))))
+        gains = payload.get("gains") or {}
+        names = BASE_STEMS | {"no_" + b for b in BASE_STEMS}
+        files = []
+        for name, g in gains.items():
+            g = min(2.0, max(0.0, float(g)))
+            if name in names and g > 0.001:
+                match = next((p for p in song_dir.iterdir() if p.stem == name and p.suffix.lower() in {".mp3", ".wav", ".flac"}), None)
+                if match:
+                    files.append((match, g))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Bad export request")
+    if not files:
+        raise HTTPException(status_code=400, detail="Nothing audible to export (every stem is muted).")
+
+    sr = 44100
+    pitch = 2 ** (semis / 12)
+    parts = [f"[{i}:a]volume={g:.3f}[a{i}]" for i, (_, g) in enumerate(files)]
+    mix = "".join(f"[a{i}]" for i in range(len(files)))
+    chain = f"{mix}amix=inputs={len(files)}:normalize=0:duration=longest"
+    if abs(pitch - 1) > 1e-6 or abs(speed - 1) > 1e-6:
+        chain += f",asetrate={sr * pitch:.2f},aresample={sr},{_tempo_chain(speed / pitch)}"
+    chain += ",alimiter=limit=0.95[out]"
+    out = Path(tempfile.mkstemp(prefix="quicktune_mix_", suffix=".mp3")[1])
+    cmd = [ffmpeg, "-y", "-v", "error"]
+    for p, _ in files:
+        cmd += ["-i", str(p)]
+    cmd += ["-filter_complex", ";".join(parts + [chain]), "-map", "[out]", "-ar", str(sr), "-b:a", "192k", str(out)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        out.unlink(missing_ok=True)
+        log_error(result.stderr)
+        raise HTTPException(status_code=500, detail="ffmpeg could not render the mix.")
+    title = "mix"
+    try:
+        title = json.loads((song_dir / "meta.json").read_text(encoding="utf-8")).get("title") or title
+    except Exception:
+        pass
+    safe = re.sub(r'[\\/:*?"<>|]+', "_", title).strip()[:80] or "mix"
+    return FileResponse(out, media_type="audio/mpeg", filename=f"{safe} (QT mix).mp3", background=BackgroundTask(out.unlink, missing_ok=True))
 
 
 @app.get("/api/sessions")

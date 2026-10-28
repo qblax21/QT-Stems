@@ -116,6 +116,7 @@
   <div class="card stack"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
   <div class="card stack"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
   <div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
+  <button class="secondary" id="mixDownloadBtn">Download this mix (MP3)</button><div class="note hidden" id="mixDownloadNote"></div>
 </section>
 <section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div id="libraryList" class="stack"></div></section>
 <section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Sessions remember the song, loop, speed, mix and notes. They are kept in this browser.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
@@ -423,6 +424,22 @@ function stemKeys(){return Object.keys(stemState)}
 function renderStemList(){const host=$('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
 function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); const g={}; for(const [name,s] of Object.entries(stemState)){let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode&&name===selectedTarget) vol=0;} g[name]=vol;} engine.post({type:'gains',g});}
 function setSpeed(v){speed=v; masterAudio.playbackRate=speed; if(engine.ready){engine.pos=curTime(); engine.posAt=performance.now(); engine.post({type:'rate',r:speed});} $('speedValue').textContent=`${Math.round(speed*100)}%`; $('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;}
+
+/* ---------- download the mix ---------- */
+$('mixDownloadBtn').addEventListener('click',async()=>{
+  const btn=$('mixDownloadBtn'), note=$('mixDownloadNote'); const outputs={}; for(const [n,s] of Object.entries(stemState)) if(s.url) outputs[n.toLowerCase()]=s.url;
+  const id=songKey(outputs); if(!id){note.textContent='Open a song from your library first.'; note.classList.remove('hidden'); return;}
+  const gains={}; const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n);
+  for(const [name,s] of Object.entries(stemState)){ if(!s.url) continue; let v=s.volume/100; if(soloed.length) v=soloed.includes(name)?v:0; else {if(s.mute) v=0; if(coverMode&&name===selectedTarget) v=0;} gains[s.url.split('/').pop().replace(/\.[^.]+$/,'')]=v; }
+  btn.disabled=true; btn.textContent='Preparing MP3…'; note.classList.add('hidden');
+  try{
+    const res=await fetch(`${backendBase()}/api/export`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song_id:id,gains,speed,pitch:pitchSteps})});
+    if(!res.ok){const d=await res.json().catch(()=>({})); throw new Error(d.detail||`HTTP ${res.status}`);}
+    const blob=await res.blob(), name=`${fileName||'mix'} (QT mix).mp3`.replace(/[\\/:*?"<>|]+/g,'_'), file=new File([blob],name,{type:'audio/mpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name}); return;}catch(e){if(e.name==='AbortError') return;}}
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(e){note.textContent=`Could not make the MP3: ${e.message||e}`; note.classList.remove('hidden');}
+  finally{btn.disabled=false; btn.textContent='Download this mix (MP3)';}});
 
 /* ---------- key (pitch) ---------- */
 let pitchSteps=0; // semitones, -6..+6
