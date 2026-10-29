@@ -9,6 +9,7 @@ A self-hosted music practice app. Upload a song, split it into stems with [Demuc
 - **Practice player:** instant mute/solo, drag-to-scrub, A/B loop with named sections, speed 50-150% and key shift of up to 6 semitones (both without changing the other), a speed trainer that climbs each loop, a metronome with tap tempo.
 - **Library** on your PC shared by every device: search, rename, delete (one or many), storage used, and "Practice again" that restores your last loop, speed, mix and notes.
 - **Saved sessions** that live on the PC and sync between phone and computer.
+- **Key and chords:** the PC estimates the song's key and its chord progression from the stems. See the current and next chord while it plays, tap any chord to jump to it, switch to Roman numerals, and the chords follow your key shift.
 - **Download the mix** (your levels, speed and key) as an MP3.
 - Purple and silver theme with light and dark modes, installable on a phone's home screen.
 
@@ -73,6 +74,7 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Python is taken from
 - On plain `http` browsers hide AudioWorklet, so the same mixer runs on a `ScriptProcessorNode`. The line under "Stem mixer" shows which one is active.
 - Saved sessions (`sessions.json`) live on the PC; the browser keeps a local copy as a fallback. The last song and per-song practice state are remembered in the browser.
 - Downloading a mix renders the MP3 on the PC with ffmpeg.
+- Key and chords (`chords.py`, numpy only): the harmonic stems (not drums, vocals or bass) are mixed, folded into pitch-class energy with tuning correction, matched against major, minor, 7th and minor-7th chord templates, and smoothed with a Viterbi pass that favours chords in the detected key. The bass stem helps pick the root. The result is cached in `stems/<id>/chords.json`. It is an estimate, so check it by ear.
 
 ## Tests
 ```bash
