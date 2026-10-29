@@ -87,11 +87,13 @@
   <div class="row toolsBar"><span class="subtle" id="toolsSummary">All tools shown</span><button class="smallBtn" id="toolsBtn">Customize</button></div>
   <div class="card stack hidden" id="toolsPanel"><div class="row"><strong>Tools</strong><span class="subtle">tick to show · arrows to move</span></div><div id="toolsList" class="stack" style="gap:.15rem"></div><div class="grid3"><button class="secondary" id="toolsCollapse">Collapse all</button><button class="secondary" id="toolsExpand">Expand all</button><button class="secondary" id="toolsReset">Reset</button></div></div>
   <div class="card stack hydrate hidden" id="hydrateBanner"><div class="row"><strong id="hydrateTitle">Loading stems…</strong><span class="subtle" id="hydratePct">0%</span></div><div class="bar"><i id="hydrateBar"></i></div><div class="note" id="hydrateNote">Controls unlock once every stem is on this device, so playback stays in sync.</div><button class="secondary hidden" id="hydrateRetry">Retry failed stems</button></div>
-  <div class="meta"><div class="chip"><strong id="timeNow">0:00</strong><span>Now</span></div><div class="chip"><strong id="timeDur">0:00</strong><span>Length</span></div><div class="chip"><strong id="repsCount">0x</strong><span>Loop reps</span></div></div>
-  <div class="card stack" data-tool="player" data-title="Waveform &amp; player" data-core="1">
+  <div class="meta" data-tool="stats" data-title="Time &amp; loop count" data-core="1"><div class="chip"><strong id="timeNow">0:00</strong><span>Now</span></div><div class="chip"><strong id="timeDur">0:00</strong><span>Length</span></div><div class="chip"><strong id="repsCount">0x</strong><span>Loop reps</span></div></div>
+  <div class="card stack" data-tool="wave" data-title="Waveform &amp; loop">
     <div class="row"><span id="loopLabel" class="subtle">Loop 0:00 → 0:00</span><span id="rateLabel" class="subtle">Speed 100%</span></div>
     <div class="waveWrap" id="waveWrap"><canvas id="waveCanvas" class="waveCanvas" width="420" height="132"></canvas><div class="marker" id="markerA" style="left:0%"></div><div class="marker" id="markerB" style="left:100%"></div><div class="playhead" id="playhead" style="left:0%"></div></div>
     <div class="smallActions"><button class="smallBtn" id="setA">Set A</button><button class="smallBtn" id="setB">Set B</button><button class="smallBtn" id="loopToggle">Loop On</button></div>
+    </div>
+  <div class="card stack" data-tool="transport" data-title="Play controls" data-core="1">
     <div class="transport"><button id="back5">⟲5</button><button id="toA">To A</button><button class="play" id="playBtn">▶</button><button id="toB">To B</button><button id="fwd5">5⟳</button></div>
   </div>
   <div class="card stack" id="harmonyCard" data-tool="chords" data-title="Key &amp; chords">
@@ -751,10 +753,10 @@ const TOOLS=(()=>{
   const cards=[...document.querySelectorAll('#practiceScreen [data-tool]')];
   const info=cards.map(el=>({key:el.dataset.tool,title:el.dataset.title,core:!!el.dataset.core,el}));
   defaults.order=info.map(t=>t.key);
-  const load=()=>{const v=LS.get('qt.layout',null); if(!v||!Array.isArray(v.order)) return JSON.parse(JSON.stringify(defaults)); const known=new Set(defaults.order); const order=v.order.filter(k=>known.has(k)); defaults.order.forEach(k=>{if(!order.includes(k)) order.push(k);}); return {order,hidden:(v.hidden||[]).filter(k=>known.has(k)),collapsed:(v.collapsed||[]).filter(k=>known.has(k))};};
+  const load=()=>{const v=LS.get('qt.layout',null); if(!v||!Array.isArray(v.order)) return JSON.parse(JSON.stringify(defaults)); const known=new Set(defaults.order); const order=v.order.filter(k=>known.has(k)); defaults.order.forEach((k,i)=>{if(order.includes(k)) return; let at=0; for(let j=i-1;j>=0;j--){const p=order.indexOf(defaults.order[j]); if(p>=0){at=p+1; break;}} order.splice(at,0,k);}); return {order,hidden:(v.hidden||[]).filter(k=>known.has(k)),collapsed:(v.collapsed||[]).filter(k=>known.has(k))};};
   let state=load();
   info.forEach(t=>{t.el.classList.add('tool'); if(t.core) return;
-    let head=t.el.firstElementChild; if(!head||!head.classList.contains('row')){head=document.createElement('div'); head.className='row'; const st=document.createElement('strong'); st.textContent=t.title; head.appendChild(st); t.el.prepend(head);}
+    let head=t.el.firstElementChild; if(!head||!head.classList.contains('row')||!head.firstElementChild||head.firstElementChild.tagName!=='STRONG'){head=document.createElement('div'); head.className='row'; const st=document.createElement('strong'); st.textContent=t.title; head.appendChild(st); t.el.prepend(head);}
     head.classList.add('toolHead'); head.addEventListener('click',e=>{if(e.target.closest('button,input,select,textarea,label,a')) return; toggle(t.key);});});
   const save=()=>LS.set('qt.layout',state);
   function apply(){
