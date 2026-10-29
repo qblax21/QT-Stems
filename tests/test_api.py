@@ -146,3 +146,35 @@ def test_export_renders_an_mp3_with_the_requested_speed(client, tmp_path):
         dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(out)],
                                    capture_output=True, text=True).stdout)
         assert 3.5 < dur < 4.6  # 2 s at half speed is about 4 s
+
+
+# ---- key and chords ------------------------------------------------------------------------------------------
+
+def test_analysis_is_cached_and_can_be_refreshed(client, monkeypatch):
+    song = make_song(client)
+    calls = []
+
+    def fake(song_dir):
+        calls.append(song_dir)
+        return {"version": backend.chords.VERSION, "key": {"tonic": 0, "mode": "major", "confidence": 1},
+                "duration": 10, "chords": [{"t": 0, "d": 10, "r": 0, "q": "maj"}]}
+
+    monkeypatch.setattr(backend.chords, "analyze_song", fake)
+    first = client.get(f"/api/analysis/{song}").json()
+    assert first["key"]["mode"] == "major" and (backend.STEMS_DIR / song / "chords.json").exists()
+    client.get(f"/api/analysis/{song}")
+    assert len(calls) == 1                                   # second call came from the cache
+    client.get(f"/api/analysis/{song}?refresh=1")
+    assert len(calls) == 2
+
+
+def test_analysis_errors(client, monkeypatch):
+    assert client.get("/api/analysis/0000000000").status_code == 404
+    assert client.get("/api/analysis/not-an-id").status_code == 404
+    song = make_song(client)
+
+    def too_short(_):
+        raise ValueError("The song is too short to analyze.")
+
+    monkeypatch.setattr(backend.chords, "analyze_song", too_short)
+    assert client.get(f"/api/analysis/{song}").status_code == 422

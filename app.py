@@ -16,6 +16,8 @@ from fastapi import FastAPI, File, Form, Request, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
+
+import chords
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quick Tune Demucs Backend")
@@ -393,6 +395,35 @@ def delete_song(song_id: str):
         f.unlink(missing_ok=True)
     JOBS.pop(song_id, None)
     return {"deleted": song_id}
+
+
+ANALYSIS_LOCK = threading.Lock()
+
+
+@app.get("/api/analysis/{song_id}")
+def analysis(song_id: str, refresh: int = 0):
+    """Key and chord progression for a song, estimated from its stems and cached next to them."""
+    song_dir = STEMS_DIR / song_id
+    if not JOB_ID_RE.match(song_id) or not song_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Unknown song")
+    cache = song_dir / "chords.json"
+    with ANALYSIS_LOCK:  # one analysis at a time keeps the PC responsive while Demucs may be running
+        if not refresh:
+            try:
+                data = json.loads(cache.read_text(encoding="utf-8"))
+                if data.get("version") == chords.VERSION:
+                    return data
+            except Exception:
+                pass
+        try:
+            data = chords.analyze_song(song_dir)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except Exception as e:
+            log_error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=f"Could not analyze this song: {str(e)[:200]}")
+        cache.write_text(json.dumps(data), encoding="utf-8")
+        return data
 
 
 def _tempo_chain(t: float):
