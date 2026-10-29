@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
 
+import backup
 import chords
 from fastapi.staticfiles import StaticFiles
 
@@ -71,6 +72,7 @@ ERROR_LOG = BASE_DIR / "last_error.txt"
 LIBRARY_DIR = BASE_DIR / "library"  # original uploads, kept so every song sent from any device lives on this PC
 LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
 SESSIONS_FILE = BASE_DIR / "sessions.json"
+BACKUP_DIR = BASE_DIR / "backups"
 SESSIONS_LOCK = threading.Lock()
 JOB_ID_RE = re.compile(r"^[0-9a-f]{10}$")
 BASE_STEMS = {"vocals", "drums", "bass", "other", "guitar", "piano"}
@@ -520,3 +522,51 @@ def put_sessions(payload: dict):
 
 
 app.mount("/stems", StaticFiles(directory=STEMS_DIR), name="stems")
+
+
+# ---- backups ---------------------------------------------------------------------------------------------------
+
+@app.post("/api/backup")
+def make_backup(payload: dict):
+    """Write a backup zip into the backups folder and send it back so the device can keep a copy too."""
+    client = payload.get("client")
+    client = client if isinstance(client, dict) else None
+    with SESSIONS_LOCK:
+        path = backup.make_backup(BACKUP_DIR, STEMS_DIR, SESSIONS_FILE, client)
+    return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
+@app.get("/api/backup/status")
+def backup_status():
+    items = backup.list_backups(BACKUP_DIR)
+    return {"count": len(items), "last": items[0]["created"] if items else None, "folder": str(BACKUP_DIR), "items": items[:5]}
+
+
+@app.post("/api/restore")
+async def restore_backup(file: UploadFile = File(...)):
+    data = await file.read()
+    try:
+        with SESSIONS_LOCK:
+            backup.make_backup(BACKUP_DIR, STEMS_DIR, SESSIONS_FILE, None, prefix="qt-before-restore")  # undo point
+            return backup.restore(data, STEMS_DIR, SESSIONS_FILE)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _auto_backup_loop():
+    """Once a day, if nothing newer exists, save a server-side backup (sessions, titles, chords)."""
+    while True:
+        try:
+            items = backup.list_backups(BACKUP_DIR)
+            if not items or time.time() - items[0]["created"] > 22 * 3600:
+                with SESSIONS_LOCK:
+                    backup.make_backup(BACKUP_DIR, STEMS_DIR, SESSIONS_FILE, None, prefix="qt-auto")
+        except Exception:
+            log_error(traceback.format_exc())
+        time.sleep(3600)
+
+
+@app.on_event("startup")
+def start_auto_backup():
+    if os.environ.get("QT_AUTOBACKUP", "1") != "0":
+        threading.Thread(target=_auto_backup_loop, daemon=True).start()

@@ -100,6 +100,7 @@
     <div class="row"><strong>Key &amp; chords</strong><span class="subtle" id="harmonyKey">–</span></div>
     <div class="chordNow"><div><div class="subtle">Now</div><div class="big" id="chordNow">–</div></div><div class="next"><div class="subtle">Next</div><div class="big" id="chordNext">–</div></div></div>
     <div class="chordStrip" id="chordStrip"></div>
+    <button class="secondary" id="chordLoopBtn">Loop chords: tap to pick</button>
     <div class="grid2"><button class="secondary" id="chordMode">Show numbers</button><button class="secondary" id="chordRefresh">Re-analyze</button></div>
     <div class="note" id="harmonyNote">Open a song from your library to see its key and chords.</div>
   </div>
@@ -124,6 +125,9 @@
     <div class="row"><strong>Metronome</strong><span class="subtle">independent click</span></div>
     <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
     <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
+    <div class="row"><span class="subtle" id="songTempo">Song tempo: not analyzed yet</span><button class="smallBtn" id="useTempoBtn" disabled>Use it</button></div>
+    <div class="row"><span>Click follows the song</span><button class="toggle" id="syncToggle" aria-label="Play the click on the song's beats"><span></span></button></div>
+    <div class="row"><span>Count-in before play</span><select id="countIn"><option value="0">Off</option><option value="1">1 bar</option><option value="2">2 bars</option></select></div>
   </div>
   <div class="card stack" data-tool="part" data-title="Part to play">
     <div class="row"><strong>Part to play</strong><button class="toggle" id="coverToggle" aria-label="Mute the part to play"><span></span></button></div>
@@ -131,12 +135,14 @@
   </div>
   <div class="card stack" data-tool="mixer" data-title="Stem mixer"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
   <div class="card stack" data-tool="notes" data-title="Practice notes"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
+  <div class="card stack" data-tool="log" data-title="Practice log"><div class="row"><strong>Practice log</strong><span class="subtle" id="logSummary">–</span></div><div class="stack" id="logBody" style="gap:.35rem"></div></div>
   <div class="stack" data-tool="actions" data-title="Save &amp; download"><div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
   <button class="secondary" id="mixDownloadBtn">Download this mix (MP3)</button><div class="note hidden" id="mixDownloadNote"></div></div>
 </section>
 <section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div class="row"><span class="subtle" id="libStats"></span><div class="libBar" id="libBar"></div></div><div id="libraryList" class="stack"></div></section>
 <section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Sessions remember the song, loop, speed, mix and notes. They are kept in this browser.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
-<section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Settings</h1><p>The Demucs backend runs on your own computer.</p></div><div class="card stack"><div class="field"><label for="backendBase">Backend address</label><input id="backendBase" value="http://localhost:8000" /></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div></section>
+<section class="screen hidden" id="settingsScreen"><div class="hero"><h1>Settings</h1><p>The Demucs backend runs on your own computer.</p></div><div class="card stack"><div class="field"><label for="backendBase">Backend address</label><input id="backendBase" value="http://localhost:8000" /></div><div class="row"><span>Model</span><span class="subtle" id="settingsModel">htdemucs</span></div><div class="row"><span>Device</span><span class="subtle" id="settingsDevice">cpu</span></div><div class="row"><span>Status</span><span class="subtle good" id="backendHealthText">not checked</span></div><button class="secondary" id="checkHealthBtn">Check Backend</button></div>
+<div class="card stack"><div class="row"><strong>Backup</strong><span class="subtle" id="backupStatus">–</span></div><div class="note">Saves your sessions, song names, chords, layout and practice log. Song audio is not included (it can be split again). The PC also saves one by itself every day in its backups folder.</div><div class="grid2"><button class="secondary" id="backupBtn">Back up now</button><label class="tertiary" for="restoreFile" style="text-align:center">Restore…</label></div><input id="restoreFile" type="file" accept=".zip,application/zip" style="display:none" /><div class="note hidden" id="backupNote"></div></div></section>
 <nav class="footerNav"><button class="active" data-screen="import">Import</button><button data-screen="practice">Practice</button><button data-screen="library">Library</button><button data-screen="sessions">Sessions</button><button data-screen="settings">Settings</button></nav>
 </section></main>
 <div id="lock" class="lock hidden"><div class="card stack"><strong>Passcode needed</strong><p class="subtle">Enter the passcode from <code>passcode.txt</code> on your PC.</p><input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode" /><div class="note hidden" id="lockErr"></div><button class="primary" id="lockBtn">Unlock</button></div></div>
@@ -316,7 +322,7 @@ const stemDefaults={Vocals:{volume:78,mute:false,solo:false,url:''},Drums:{volum
 let selectedModel='htdemucs', selectedDevice='cpu', selectedTarget='Guitar', coverMode=true, loopEnabled=true, speed=1, loopA=0, loopB=1, loopReps=0, dragMode=null, waveformData=null, sessions=[], fileName='No song loaded', objectUrl=null, scrubbing=false;
 const stemState=structuredClone(stemDefaults);
 
-function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name)); if(name==='practice'&&typeof resizeCanvas==='function') requestAnimationFrame(resizeCanvas); if(name==='library') loadLibrary(); if(name==='sessions') syncSessions();}
+function showScreen(name){Object.entries(screens).forEach(([k,el])=>el.classList.toggle('hidden',k!==name));navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.screen===name)); if(name==='practice'&&typeof resizeCanvas==='function') requestAnimationFrame(resizeCanvas); if(name==='library') loadLibrary(); if(name==='sessions') syncSessions(); if(name==='settings'&&typeof refreshBackupStatus==='function') refreshBackupStatus(); if(name==='practice'&&typeof renderLog==='function') renderLog();}
 navButtons.forEach(btn=>btn.addEventListener('click',()=>showScreen(btn.dataset.screen)));
 function formatTime(sec){if(!isFinite(sec)) return '0:00'; const m=Math.floor(sec/60), s=Math.floor(sec%60).toString().padStart(2,'0'); return `${m}:${s}`}
 function backendBase(){return $('backendBase').value.replace(/\/$/,'')}
@@ -343,6 +349,8 @@ function curTime(){
 function isPlaying(){return engine.ready?engine.playing:!masterAudio.paused}
 function setPlayLabel(on){$('playBtn').textContent=on?'❚❚':'▶'}
 async function transportPlay(){
+  if(countState.run){cancelCountIn(); return;}
+  if(!isPlaying()&&!(await countIn())) return;
   if(engine.ready){
     try{if(navigator.audioSession) navigator.audioSession.type='playback';}catch(e){} // iOS: play even with the silent switch on
     if(engine.ac.state!=='running') await engine.ac.resume();
@@ -395,7 +403,7 @@ async function prepareEngine(gen){
     const fmt=pickFormat(dur,names.length); engine.rate=fmt.rate; engine.ch=fmt.ch;
     let ac; try{ac=new (window.AudioContext||window.webkitAudioContext)({sampleRate:fmt.rate,latencyHint:'playback'});}catch(e){ac=new (window.AudioContext||window.webkitAudioContext)(); engine.rate=ac.sampleRate;}
     const node=await makePlayerNode(ac);
-    node.port.onmessage=e=>{const m=e.data; if(m.type==='pos'){engine.pos=m.t; engine.posAt=performance.now();} else if(m.type==='wrap'){loopReps++; $('repsCount').textContent=`${loopReps}x`; trainerStep();} else if(m.type==='ended'){engine.playing=false; engine.pos=engine.dur; setPlayLabel(false);}};
+    node.port.onmessage=e=>{const m=e.data; if(m.type==='pos'){engine.pos=m.t; engine.posAt=performance.now();} else if(m.type==='wrap'){logLoop(); loopReps++; $('repsCount').textContent=`${loopReps}x`; trainerStep();} else if(m.type==='ended'){engine.playing=false; engine.pos=engine.dur; setPlayLabel(false);}};
     if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
     engineReset(); engine.ac=ac; engine.node=node; engine.rate=ac.sampleRate; engine.error=null;
     const peaks=new Float32Array(600); let maxLen=0;
@@ -423,7 +431,7 @@ async function prepareEngine(gen){
   updateHydrationUI();}
 
 /* ---------- waveform / loop UI ---------- */
-function updateLoopUI(){const dur=curDur(); if(typeof renderMarks==='function'&&$('markList').children.length) renderMarks(); const a=loopA*dur,b=Math.max(loopB*dur,a+.2); $('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; $('markerA').style.left=`${loopA*100}%`; $('markerB').style.left=`${loopB*100}%`; drawWaveform(); engineLoop();}
+function updateLoopUI(){const dur=curDur(); if(typeof renderMarks==='function'&&$('markList').children.length) renderMarks(); const a=loopA*dur,b=Math.max(loopB*dur,a+.2); $('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; $('markerA').style.left=`${loopA*100}%`; $('markerB').style.left=`${loopB*100}%`; drawWaveform(); engineLoop(); if(typeof markLoopChips==='function'&&harmony.data) markLoopChips();}
 function updatePlayhead(){const dur=curDur(), t=curTime(); const p=dur?(t/dur):0; $('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; $('timeNow').textContent=formatTime(t);}
 function frame(){if(isPlaying()&&!scrubbing){updatePlayhead(); if(!engine.ready) masterLoopCheck();} if(harmony.data) updateChordNow(); requestAnimationFrame(frame);}
 function masterLoopCheck(){const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){masterAudio.currentTime=a; loopReps+=1; $('repsCount').textContent=`${loopReps}x`;}}
@@ -490,13 +498,14 @@ function harmonyMessage(text){$('harmonyNote').textContent=text; $('harmonyNote'
 function renderHarmony(){
   const d=harmony.data, strip=$('chordStrip'); strip.innerHTML=''; harmony.idx=-2;
   $('chordMode').textContent=harmony.numerals?'Show chord names':'Show numbers';
-  if(!d){$('harmonyKey').textContent='–'; $('chordNow').textContent='–'; $('chordNext').textContent='–'; return;}
+  if(!d){$('harmonyKey').textContent='–'; $('chordNow').textContent='–'; $('chordNext').textContent='–'; renderTempo(); return;}
+  renderTempo();
   const k=shiftedKey(), rel=noteName((k.mode==='major'?k.tonic+9:k.tonic+3)%12,k);
   const sure=d.key.confidence>=0.12;
   $('harmonyKey').textContent=`${noteName(k.tonic,k)} ${k.mode}`+(sure?'':' (unsure)');
   harmonyMessage(`${pitchSteps?`You moved the song ${pitchSteps>0?'up':'down'} ${Math.abs(pitchSteps)} st; it was in ${noteName(d.key.tonic,{tonic:d.key.tonic,mode:d.key.mode})} ${d.key.mode}. `:''}Same notes as ${rel} ${k.mode==='major'?'minor':'major'}. Chords are estimated by the PC and are best on clear guitar and piano parts: check them by ear.`);
-  d.chords.forEach((c,i)=>{if(c.q==='N') return; const b=document.createElement('button'); b.className='chordChip'; b.dataset.i=i; b.textContent=chordLabel(c); b.title=formatTime(c.t); b.addEventListener('click',()=>transportSeek(c.t)); strip.appendChild(b);});
-  updateChordNow(true);}
+  d.chords.forEach((c,i)=>{if(c.q==='N') return; const b=document.createElement('button'); b.className='chordChip'; b.dataset.i=i; b.textContent=chordLabel(c); b.title=formatTime(c.t); b.addEventListener('click',()=>chordTap(i)); strip.appendChild(b);});
+  updateChordNow(true); markLoopChips();}
 function updateChordNow(force){
   const d=harmony.data; if(!d) return; const t=curTime(), cs=d.chords; let lo=0,hi=cs.length-1,i=-1;
   while(lo<=hi){const mid=(lo+hi)>>1; if(cs[mid].t<=t){i=mid; lo=mid+1;} else hi=mid-1;}
@@ -506,6 +515,20 @@ function updateChordNow(force){
   const strip=$('chordStrip'); let active=null;
   strip.querySelectorAll('.chordChip').forEach(b=>{const on=Number(b.dataset.i)===i; b.classList.toggle('active',on); if(on) active=b;});
   if(active&&!strip.matches(':hover')){const top=active.offsetTop-strip.offsetTop; if(top<strip.scrollTop||top+active.offsetHeight>strip.scrollTop+strip.clientHeight) strip.scrollTop=Math.max(0,top-8);}}
+function chordTap(i){
+  const cs=harmony.data.chords, dur=curDur();
+  if(!harmony.pick||!dur){transportSeek(cs[i].t); return;}
+  if(harmony.first==null||harmony.second!=null){harmony.first=i; harmony.second=null;} else harmony.second=i;
+  const lo=Math.min(harmony.first,harmony.second??harmony.first), hi=Math.max(harmony.first,harmony.second??harmony.first);
+  const a=cs[lo].t, b=Math.min(dur,cs[hi].t+cs[hi].d);
+  loopA=a/dur; loopB=Math.max(b/dur,loopA+.002); loopEnabled=true; $('loopToggle').textContent='Loop On'; updateLoopUI(); transportSeek(a);
+  const label=c=>c.q==='N'?'–':chordLabel(c);
+  harmonyMessage(harmony.second==null?`Looping ${label(cs[lo])}. Tap another chord to loop everything up to it, or tap again to start over.`:`Looping ${label(cs[lo])} to ${label(cs[hi])} (${formatTime(a)} – ${formatTime(b)}). Tap a chord to start a new loop.`);}
+function markLoopChips(){
+  const d=harmony.data; if(!d) return; const dur=curDur(), partial=dur&&loopEnabled&&(loopB-loopA)<.995, a=loopA*dur-.05, b=loopB*dur+.05;
+  $('chordStrip').querySelectorAll('.chordChip').forEach(btn=>{const c=d.chords[btn.dataset.i]; btn.classList.toggle('inloop',!!partial&&c.t>=a&&c.t+c.d<=b);});}
+$('chordLoopBtn').addEventListener('click',()=>{harmony.pick=!harmony.pick; harmony.first=null; harmony.second=null; $('chordLoopBtn').textContent=harmony.pick?'Loop chords: on (tap a chord)':'Loop chords: tap to pick'; $('chordLoopBtn').classList.toggle('primary',harmony.pick); $('chordLoopBtn').classList.toggle('secondary',!harmony.pick);
+  if(harmony.pick) harmonyMessage('Tap a chord to loop it. Tap a second chord to loop everything between them.');});
 async function loadHarmony(id,refresh){
   const gen=++harmony.gen; harmony.id=id; harmony.data=null; renderHarmony();
   if(!id){harmonyMessage('Open a song from your library to see its key and chords.'); return;}
@@ -513,7 +536,7 @@ async function loadHarmony(id,refresh){
   try{
     const res=await fetch(`${backendBase()}/api/analysis/${id}${refresh?'?refresh=1':''}`);
     if(!res.ok){const e=await res.json().catch(()=>({})); throw new Error(e.detail||`HTTP ${res.status}`);}
-    const data=await res.json(); if(gen!==harmony.gen) return; harmony.data=data; renderHarmony();
+    const data=await res.json(); if(gen!==harmony.gen) return; harmony.data=data; renderHarmony(); const T=songTempo(); if(T) setBpm(T.bpm);
   }catch(e){if(gen===harmony.gen) harmonyMessage(`Couldn't get the key and chords: ${e.message||e}`);}}
 $('chordMode').addEventListener('click',()=>{harmony.numerals=!harmony.numerals; LS.set('qt.chordNumerals',harmony.numerals); renderHarmony();});
 $('chordRefresh').addEventListener('click',()=>{if(harmony.id) loadHarmony(harmony.id,true);});
@@ -527,16 +550,44 @@ function trainerStep(){ // called on every loop wrap
   if(loopReps%n!==0||speed>=m-1e-6) return; setSpeed(Math.min(1.5,Math.min(m,Math.round((speed+a/100)*100)/100)));}
 $('trainerToggle').addEventListener('click',()=>{trainer.on=!trainer.on; setToggle($('trainerToggle'),trainer.on); trainerNote();});
 ['trStep','trEvery','trMax'].forEach(id=>$(id).addEventListener('change',trainerNote));
-const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[]};
+const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[],sync:false,lastBeat:-1e9,lastSp:0};
 function setBpm(v){metro.bpm=Math.max(30,Math.min(300,Math.round(v))); $('bpmValue').textContent=`${metro.bpm} BPM`;}
-function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08);}
-function metroTick(){while(metro.next<metro.ac.currentTime+.12){metroClick(metro.next,metro.beat%4===0); metro.next+=60/metro.bpm; metro.beat++;}}
+function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08); return o;}
+function metroTick(){
+  const T=harmony.data&&harmony.data.tempo;
+  if(metro.sync&&T){ // click on the song's own beats; they stretch with the speed
+    if(!isPlaying()) return;
+    const spb=60/T.bpm, now=metro.ac.currentTime, sp=curTime(), horizon=.12*speed;
+    if(sp<metro.lastSp-.05) metro.lastBeat=-1e9; metro.lastSp=sp;
+    for(let n=Math.ceil((sp-T.offset)/spb-1e-6);;n++){const bt=T.offset+n*spb; if(bt>sp+horizon) break; if(n<=metro.lastBeat) continue; metro.lastBeat=n; metroClick(now+Math.max(0,(bt-sp)/speed),((n%4)+4)%4===0);}
+    return;}
+  while(metro.next<metro.ac.currentTime+.12){metroClick(metro.next,metro.beat%4===0); metro.next+=60/metro.bpm; metro.beat++;}}
 function metroToggle(){
   if(metro.on){clearInterval(metro.timer); metro.on=false; $('metroBtn').textContent='Start click'; return;}
   if(!metro.ac) metro.ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
   metro.ac.resume(); metro.on=true; metro.beat=0; metro.next=metro.ac.currentTime+.06; metro.timer=setInterval(metroTick,25); metroTick(); $('metroBtn').textContent='Stop click';}
 $('metroBtn').addEventListener('click',metroToggle); $('bpmDown').addEventListener('click',()=>setBpm(metro.bpm-1)); $('bpmUp').addEventListener('click',()=>setBpm(metro.bpm+1));
 $('tapBtn').addEventListener('click',()=>{const now=performance.now(); if(metro.taps.length&&now-metro.taps[metro.taps.length-1]>2000) metro.taps=[]; metro.taps.push(now); metro.taps=metro.taps.slice(-7); if(metro.taps.length>=2){const iv=(metro.taps[metro.taps.length-1]-metro.taps[0])/(metro.taps.length-1); setBpm(60000/iv);}});
+
+/* tempo from the analysis, synced click, count-in */
+setToggle($('syncToggle'),false);
+$('syncToggle').addEventListener('click',()=>{if(!(harmony.data&&harmony.data.tempo)){harmonyMessage('The song tempo is not known yet.'); return;} metro.sync=!metro.sync; metro.lastBeat=-1e9; setToggle($('syncToggle'),metro.sync);});
+function songTempo(){const T=harmony.data&&harmony.data.tempo; return T&&T.confidence>=.3?T:null;}
+function renderTempo(){const T=harmony.data&&harmony.data.tempo, ok=!!songTempo();
+  $('songTempo').textContent=!harmony.data?'Song tempo: not analyzed yet':!T?'Song tempo: could not be found':`Song tempo: ${T.bpm} BPM${ok?'':' (unsure)'}`;
+  $('useTempoBtn').disabled=!T;}
+$('useTempoBtn').addEventListener('click',()=>{const T=harmony.data&&harmony.data.tempo; if(T) setBpm(T.bpm);});
+const countState={run:null};
+async function countIn(){
+  const bars=Number($('countIn').value); if(!bars) return true;
+  if(!metro.ac) metro.ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  await metro.ac.resume();
+  const T=songTempo(), gap=60/((T?T.bpm:metro.bpm)*speed), beats=bars*4, t0=metro.ac.currentTime+.08;
+  const run={cancel:false,osc:[]}; countState.run=run; setPlayLabel(true);
+  for(let i=0;i<beats;i++) run.osc.push(metroClick(t0+i*gap,i%4===0));
+  await new Promise(r=>setTimeout(r,(.08+beats*gap)*1000));
+  countState.run=null; return !run.cancel;}
+function cancelCountIn(){const r=countState.run; if(!r) return false; r.cancel=true; r.osc.forEach(o=>{try{o.stop()}catch{}}); countState.run=null; setPlayLabel(false); return true;}
 
 /* ---------- stems: download, then hand to the player ---------- */
 let hydrateGen=0;
@@ -749,7 +800,7 @@ else if(location.protocol==='http:'&&!['localhost','127.0.0.1',''].includes(loca
 syncSessions(); pingBackend();
 /* ---------- tools: show, hide, collapse and reorder the practice cards ---------- */
 const TOOLS=(()=>{
-  const defaults={order:[],hidden:[],collapsed:['trainer','metronome','notes']};
+  const defaults={order:[],hidden:[],collapsed:['trainer','metronome','notes','log']};
   const cards=[...document.querySelectorAll('#practiceScreen [data-tool]')];
   const info=cards.map(el=>({key:el.dataset.tool,title:el.dataset.title,core:!!el.dataset.core,el}));
   defaults.order=info.map(t=>t.key);
@@ -779,6 +830,54 @@ const TOOLS=(()=>{
   $('toolsReset').addEventListener('click',()=>{state=JSON.parse(JSON.stringify(defaults)); save(); apply(); renderList();});
   apply(); return {apply};
 })();
+
+/* ---------- practice log ---------- */
+const plog={data:LS.get('qt.history',{songs:{}}),ticks:0,dirty:false};
+if(!plog.data.songs) plog.data={songs:{}};
+const dayKey=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function logEntry(){const id=harmony.id; if(!id) return null; const song=plog.data.songs[id]||(plog.data.songs[id]={title:'',days:{}}); song.title=fileName||song.title||'Untitled song'; return song.days[dayKey()]||(song.days[dayKey()]={s:0,sp:0,l:0});}
+function logLoop(){const e=isPlaying()?logEntry():null; if(e){e.l++; plog.dirty=true;}}
+const fmtMin=s=>s<90?`${Math.round(s)} s`:s<3600?`${Math.round(s/60)} min`:`${Math.floor(s/3600)} h ${Math.round(s%3600/60)} m`;
+function logTotals(){const days={}; let total=0; for(const song of Object.values(plog.data.songs)) for(const [d,e] of Object.entries(song.days)){days[d]=(days[d]||0)+e.s; total+=e.s;}
+  let streak=0; const c=new Date(); if(!(days[dayKey(c)]>=60)) c.setDate(c.getDate()-1); while(days[dayKey(c)]>=60){streak++; c.setDate(c.getDate()-1);} return {today:days[dayKey()]||0,streak,total,activeDays:Object.values(days).filter(v=>v>=60).length};}
+function renderLog(){
+  const t=logTotals(), body=$('logBody'); $('logSummary').textContent=t.today?`today ${fmtMin(t.today)}`+(t.streak>1?` · ${t.streak}-day streak`:''):(t.streak?`${t.streak}-day streak`:'nothing today');
+  body.innerHTML=''; const add=(a,b,strong)=>{const r=document.createElement('div'); r.className='row'; const x=document.createElement('span'); x.textContent=a; if(strong) x.style.fontWeight='700'; const y=document.createElement('span'); y.className='subtle'; y.textContent=b; r.append(x,y); body.appendChild(r);};
+  const song=plog.data.songs[harmony.id];
+  if(song){const days=Object.entries(song.days).filter(([,e])=>e.s>=10).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,7);
+    if(days.length){add('This song','',true); days.forEach(([d,e])=>{const dt=new Date(d+'T12:00:00'); add(dt.toLocaleDateString(undefined,{month:'short',day:'numeric'}),`${fmtMin(e.s)}${e.l?` · ${e.l} loops`:''}${e.sp?` · up to ${e.sp}%`:''}`);});}
+    else add('This song','not practiced yet');}
+  add('All songs',`${fmtMin(t.total)} on ${t.activeDays} day${t.activeDays===1?'':'s'}`,true);}
+function saveLog(){if(!plog.dirty) return; plog.dirty=false; LS.set('qt.history',plog.data);}
+setInterval(()=>{ if(!isPlaying()||document.hidden) return; const e=logEntry(); if(!e) return; e.s++; e.sp=Math.max(e.sp,Math.round(speed*100)); plog.dirty=true; if(++plog.ticks%10===0){saveLog(); renderLog();}},1000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden) saveLog();}); addEventListener('pagehide',saveLog);
+renderLog();
+
+/* ---------- backup and restore ---------- */
+const CLIENT_KEYS=['qt.layout','qt.history','qt.songs','qt.sessions','qt.deleted','qt.theme','qt.chordNumerals'];
+const backupNote=t=>{$('backupNote').textContent=t; $('backupNote').classList.toggle('hidden',!t);};
+async function refreshBackupStatus(){try{const r=await fetch(`${backendBase()}/api/backup/status`); const d=await r.json(); $('backupStatus').textContent=d.last?`last: ${new Date(d.last*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}`:'none yet';}catch{$('backupStatus').textContent='PC not reachable';}}
+$('backupBtn').addEventListener('click',async()=>{
+  const btn=$('backupBtn'); btn.disabled=true; btn.textContent='Backing up…'; backupNote('');
+  try{saveLog(); const client={}; for(const k of CLIENT_KEYS){const v=LS.get(k,undefined); if(v!==undefined) client[k]=v;}
+    const res=await fetch(`${backendBase()}/api/backup`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client})});
+    if(!res.ok){const d=await res.json().catch(()=>({})); throw new Error(d.detail||`HTTP ${res.status}`);}
+    const blob=await res.blob(), name=`QT backup ${dayKey()}.zip`, file=new File([blob],name,{type:'application/zip'});
+    backupNote('Saved on the PC (backups folder). Keep the copy you just downloaded somewhere safe too.');
+    if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});}catch(e){if(e.name!=='AbortError') throw e;}}
+    else{const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
+    refreshBackupStatus();
+  }catch(e){backupNote(`Backup failed: ${e.message||e}`);}
+  finally{btn.disabled=false; btn.textContent='Back up now';}});
+$('restoreFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(!confirm('Restore this backup? Your current sessions, layout and practice log will be replaced. The PC keeps an undo copy first.')) return;
+  backupNote('Restoring…');
+  try{const fd=new FormData(); fd.append('file',f); const res=await fetch(`${backendBase()}/api/restore`,{method:'POST',body:fd}); const d=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(d.detail||`HTTP ${res.status}`);
+    for(const [k,v] of Object.entries(d.client||{})) if(CLIENT_KEYS.includes(k)) LS.set(k,v);
+    backupNote('Restored. Reloading…'); setTimeout(()=>location.reload(),800);
+  }catch(err){backupNote(`Could not restore: ${err.message||err}`);}});
 
 renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar'); requestAnimationFrame(frame);
 </script>

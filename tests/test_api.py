@@ -19,6 +19,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(backend, "STEMS_DIR", stems)
     monkeypatch.setattr(backend, "LIBRARY_DIR", library)
     monkeypatch.setattr(backend, "SESSIONS_FILE", tmp_path / "sessions.json")
+    monkeypatch.setattr(backend, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(backend, "PASSCODE", "")
     monkeypatch.setattr(backend, "MAX_UPLOAD_MB", 500)
     return TestClient(backend.app)
@@ -178,3 +179,48 @@ def test_analysis_errors(client, monkeypatch):
 
     monkeypatch.setattr(backend.chords, "analyze_song", too_short)
     assert client.get(f"/api/analysis/{song}").status_code == 422
+
+
+# ---- backup and restore --------------------------------------------------------------------------------------
+
+def test_backup_then_restore_brings_back_sessions_titles_and_client_data(client):
+    song = make_song(client, title="Dragon")
+    payload = {"sessions": [{"id": "s1", "title": "x"}], "deleted": []}
+    client.put("/api/sessions", json=payload)
+    r = client.post("/api/backup", json={"client": {"qt.layout": {"order": ["a"]}, "qt.key": "SECRET", "other": 1}})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    assert client.get("/api/backup/status").json()["count"] == 1
+
+    client.put("/api/sessions", json={"sessions": [], "deleted": []})
+    (backend.STEMS_DIR / song / "meta.json").write_text(json.dumps({"title": "Changed"}))
+    out = client.post("/api/restore", files={"file": ("b.zip", r.content, "application/zip")}).json()
+    assert out["sessions"] is True and out["songs"] == 1
+    assert out["client"] == {"qt.layout": {"order": ["a"]}}            # the passcode and unknown keys are never saved
+    assert client.get("/api/sessions").json()["sessions"] == payload["sessions"]
+    assert json.loads((backend.STEMS_DIR / song / "meta.json").read_text())["title"] == "Dragon"
+    assert client.get("/api/backup/status").json()["count"] == 2        # restoring first saves an undo point
+
+
+def test_restore_rejects_junk_and_ignores_unexpected_files(client):
+    import io, zipfile
+    assert client.post("/api/restore", files={"file": ("b.zip", b"not a zip", "application/zip")}).status_code == 400
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("manifest.json", json.dumps({"app": "qt-stems"}))
+        z.writestr("../evil.txt", "x")
+        z.writestr("songs/zzzzzzzzzz/meta.json", "{}")
+        z.writestr("songs/abc1234567/meta.json", json.dumps({"title": "Ghost"}))  # no such song here
+    out = client.post("/api/restore", files={"file": ("b.zip", buf.getvalue(), "application/zip")}).json()
+    assert out == {"client": {}, "sessions": False, "songs": 0}
+    assert not (backend.STEMS_DIR / "abc1234567").exists() and not (backend.BACKUP_DIR.parent / "evil.txt").exists()
+    other = io.BytesIO()
+    with zipfile.ZipFile(other, "w") as z:
+        z.writestr("manifest.json", json.dumps({"app": "something-else"}))
+    assert client.post("/api/restore", files={"file": ("b.zip", other.getvalue(), "application/zip")}).status_code == 400
+
+
+def test_backups_are_pruned_to_the_newest_ones(client, tmp_path):
+    import backup as b
+    for _ in range(b.KEEP + 3):
+        b.make_backup(backend.BACKUP_DIR, backend.STEMS_DIR, backend.SESSIONS_FILE)
+    assert len(b.list_backups(backend.BACKUP_DIR)) == b.KEEP

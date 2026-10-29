@@ -12,7 +12,9 @@ from pathlib import Path
 
 import numpy as np
 
-VERSION = 1
+VERSION = 2
+TEMPO_HOP = 256
+TEMPO_NFFT = 1024
 SR = 11025
 HOP = 1024
 NFFT_HARM = 4096
@@ -109,6 +111,57 @@ def estimate_key(chroma_mean: np.ndarray):
     return best[1], best[2], float(max(0.0, min(1.0, (best[0] - second[0]) * 4)))
 
 
+def onset_envelope(x: np.ndarray, sr: int = SR) -> np.ndarray:
+    """Spectral-flux onset strength per TEMPO_HOP samples, with the slow average removed and scaled to 0..1."""
+    mags, _ = _band_magnitudes(x, TEMPO_NFFT, 40.0, 5000.0, hop=TEMPO_HOP, sr=sr)
+    flux = np.concatenate([[0.0], np.maximum(np.diff(mags, axis=0), 0).sum(axis=1)])
+    w = max(3, int(round(0.5 * sr / TEMPO_HOP)) | 1)
+    env = np.maximum(flux - np.convolve(flux, np.ones(w) / w, mode="same"), 0)
+    peak = env.max()
+    return env / peak if peak > 0 else env
+
+
+def _comb(env: np.ndarray, period: float, phases: np.ndarray) -> np.ndarray:
+    """Mean onset strength on a beat grid with the given period (frames) for each candidate phase (frames)."""
+    n = len(env)
+    k = np.arange(int(n / period) + 1)
+    pos = np.round(phases[:, None] + k[None, :] * period).astype(int)
+    ok = pos < n
+    vals = np.where(ok, env[np.minimum(pos, n - 1)], 0.0)
+    return vals.sum(axis=1) / np.maximum(ok.sum(axis=1), 1)
+
+
+def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
+    """Constant-tempo estimate: {'bpm', 'offset' (seconds of the first beat), 'confidence' 0..1}, or None."""
+    env = onset_envelope(x, sr)
+    n = len(env)
+    fps = sr / TEMPO_HOP
+    if n < fps * 6 or env.max() <= 0:
+        return None
+    spec = np.fft.rfft(env - env.mean(), 2 * n)
+    ac = np.fft.irfft(np.abs(spec) ** 2)[:n]
+    ac = ac / np.maximum(n - np.arange(n), 1)
+    bpms = np.arange(60.0, 200.0, 0.25)
+    lags = fps * 60.0 / bpms
+    prior = np.exp(-0.5 * (np.log2(bpms / 110.0) / 0.9) ** 2)
+    score = np.interp(lags, np.arange(n), ac) * prior
+    rough = float(bpms[int(score.argmax())])
+    # refine: search +-3% for the beat grid that lines up best with the onsets
+    smooth = np.convolve(env, np.array([0.25, 0.5, 0.25]), mode="same")
+    best = (-1.0, rough, 0.0)
+    for bpm in np.arange(rough * 0.97, rough * 1.03, 0.05):
+        period = fps * 60.0 / bpm
+        phases = np.arange(0.0, period, 0.5)
+        c = _comb(smooth, period, phases)
+        i = int(c.argmax())
+        if c[i] > best[0]:
+            best = (float(c[i]), float(bpm), float(phases[i]))
+    value, bpm, phase = best
+    base = float(smooth.mean()) or 1e-9
+    return {"bpm": round(bpm, 1), "offset": round(phase / fps, 3),
+            "confidence": round(float(max(0.0, min(1.0, (value / base - 1.0) / 3.0))), 2)}
+
+
 def _diatonic(tonic: int, mode: str) -> np.ndarray:
     scale = {(tonic + s) % 12 for s in (MAJOR_SCALE if mode == "major" else MINOR_SCALE)}
     out = np.zeros(len(LABELS))
@@ -138,8 +191,8 @@ def _viterbi(emit: np.ndarray, stay: float = 0.92) -> np.ndarray:
     return path
 
 
-def analyze_signal(harm: np.ndarray, bass: np.ndarray | None = None, sr: int = SR) -> dict:
-    """harm / bass: mono float signals at `sr` (SR). Returns the key and a list of chord segments."""
+def analyze_signal(harm: np.ndarray, bass: np.ndarray | None = None, sr: int = SR, drums: np.ndarray | None = None) -> dict:
+    """harm / bass / drums: mono float signals at `sr` (SR). Returns the key, chord segments and tempo."""
     if len(harm) < sr * 2:
         raise ValueError("The song is too short to analyze.")
     hop_s = HOP / sr
@@ -220,6 +273,7 @@ def analyze_signal(harm: np.ndarray, bass: np.ndarray | None = None, sr: int = S
         "tuning": round(tuning, 2),
         "duration": round(len(harm) / sr, 2),
         "chords": chords,
+        "tempo": estimate_tempo(drums if drums is not None and len(drums) >= sr * 6 else harm, sr),
     }
 
 
@@ -240,6 +294,7 @@ def analyze_song(song_dir: Path) -> dict:
     if not files:
         raise RuntimeError("This song has no stems to analyze.")
     harm_files, bass_files = pick_stems(files)
+    drum_files = [p for n, p in files.items() if n == "drums"]
 
     def mix(paths):
         sigs = [decode_mono(p, ffmpeg) for p in paths]
@@ -249,4 +304,4 @@ def analyze_song(song_dir: Path) -> dict:
             total[:len(s)] += s
         return total
 
-    return analyze_signal(mix(harm_files), mix(bass_files) if bass_files else None)
+    return analyze_signal(mix(harm_files), mix(bass_files) if bass_files else None, drums=mix(drum_files) if drum_files else None)

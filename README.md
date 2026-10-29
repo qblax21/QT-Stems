@@ -11,6 +11,10 @@ A self-hosted music practice app. Upload a song, split it into stems with [Demuc
 - **Library** on your PC shared by every device: search, rename, delete (one or many), storage used, and "Practice again" that restores your last loop, speed, mix and notes.
 - **Saved sessions** that live on the PC and sync between phone and computer.
 - **Key and chords:** the PC estimates the song's key and its chord progression from the stems. See the current and next chord while it plays, tap any chord to jump to it, switch to Roman numerals, and the chords follow your key shift.
+- **Tempo and click:** the song's BPM is detected and sets the metronome automatically. The click can follow the song's own beats (and stretches with the speed), and an optional 1 or 2 bar count-in plays before you start.
+- **Loop by chord:** switch on "Loop chords", tap a chord to loop it, tap a second one to loop everything between them.
+- **Practice log:** time practiced per day and per song, loops, top speed, and your streak (kept on each device).
+- **Backup:** Settings has Back up now and Restore. The PC also saves one by itself daily in `backups/` (the newest 14 are kept). Song audio is not included.
 - **Download the mix** (your levels, speed and key) as an MP3.
 - Purple and silver theme with light and dark modes, installable on a phone's home screen.
 
@@ -75,7 +79,7 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Python is taken from
 - On plain `http` browsers hide AudioWorklet, so the same mixer runs on a `ScriptProcessorNode`. The line under "Stem mixer" shows which one is active.
 - Saved sessions (`sessions.json`) live on the PC; the browser keeps a local copy as a fallback. The last song and per-song practice state are remembered in the browser.
 - Downloading a mix renders the MP3 on the PC with ffmpeg.
-- Key and chords (`chords.py`, numpy only): the harmonic stems (not drums, vocals or bass) are mixed, folded into pitch-class energy with tuning correction, matched against major, minor, 7th and minor-7th chord templates, and smoothed with a Viterbi pass that favours chords in the detected key. The bass stem helps pick the root. The result is cached in `stems/<id>/chords.json`. It is an estimate, so check it by ear.
+- Key and chords (`chords.py`, numpy only): the harmonic stems (not drums, vocals or bass) are mixed, folded into pitch-class energy with tuning correction, matched against major, minor, 7th and minor-7th chord templates, and smoothed with a Viterbi pass that favours chords in the detected key. The bass stem helps pick the root. The tempo comes from the drums stem (onset strength, autocorrelation, then a beat-grid fit); it assumes a steady tempo, so live songs that drift may not line up. The result is cached in `stems/<id>/chords.json`. It is an estimate, so check it by ear.
 
 ## Tests
 ```bash

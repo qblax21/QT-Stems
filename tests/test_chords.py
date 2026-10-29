@@ -86,3 +86,32 @@ def test_picks_harmony_stems_and_leaves_out_drums_and_vocals():
     assert [p.name for p in chords.pick_stems(two)[0]] == ["no_vocals"]
     only = {"drums": Path("drums")}
     assert [p.name for p in chords.pick_stems(only)[0]] == ["drums"]
+
+
+# ---- tempo -----------------------------------------------------------------------------------------------------
+
+def click_track(bpm, seconds=30, offset=0.0, seed=0):
+    rng = np.random.default_rng(seed)
+    x = np.zeros(int(seconds * SR), dtype=np.float32)
+    step = 60.0 / bpm
+    t = offset
+    while t < seconds - 0.1:
+        i = int(t * SR)
+        burst = rng.standard_normal(300).astype(np.float32) * np.exp(-np.arange(300) / 60.0)
+        x[i:i + 300] += burst
+        t += step
+    return x
+
+
+@pytest.mark.parametrize("bpm,offset", [(120, 0.1), (93, 0.25), (140, 0.0), (76, 0.3)])
+def test_tempo_and_first_beat_on_a_click_track(bpm, offset):
+    result = chords.estimate_tempo(click_track(bpm, offset=offset))
+    assert abs(result["bpm"] - bpm) < 0.6 or abs(result["bpm"] - bpm * 2) < 1.0 or abs(result["bpm"] * 2 - bpm) < 1.0
+    period = 60.0 / result["bpm"]
+    drift = (result["offset"] - offset) % period
+    assert min(drift, period - drift) < 0.04
+    assert result["confidence"] > 0.3
+
+
+def test_tempo_of_silence_is_none():
+    assert chords.estimate_tempo(np.zeros(SR * 20, dtype=np.float32)) is None
