@@ -115,3 +115,42 @@ def test_tempo_and_first_beat_on_a_click_track(bpm, offset):
 
 def test_tempo_of_silence_is_none():
     assert chords.estimate_tempo(np.zeros(SR * 20, dtype=np.float32)) is None
+
+
+def varying_track(bpm_at, seconds=48, seed=1):
+    """Click track whose tempo follows bpm_at(t). Returns (signal, true beat times)."""
+    rng = np.random.default_rng(seed)
+    x = np.zeros(int(seconds * SR), dtype=np.float32)
+    t, beats = 0.2, []
+    while t < seconds - 0.2:
+        beats.append(t)
+        i = int(t * SR)
+        x[i:i + 300] += rng.standard_normal(300).astype(np.float32) * np.exp(-np.arange(300) / 60.0)
+        t += 60.0 / bpm_at(t)
+    return x, np.array(beats)
+
+
+def beat_hits(found, truth, tol=0.07):
+    found = np.array(found)
+    return float(np.mean([np.min(np.abs(found - b)) < tol for b in truth]))
+
+
+def test_beats_follow_a_steady_tempo():
+    x, truth = varying_track(lambda t: 110)
+    result = chords.estimate_tempo(x)
+    assert abs(result["bpm"] - 110) < 1 and not result["varies"]
+    assert beat_hits(result["beats"], truth) > 0.95
+
+
+def test_beats_follow_a_gradual_speed_up():
+    x, truth = varying_track(lambda t: 100 + 30 * t / 48)
+    result = chords.estimate_tempo(x)
+    assert result["varies"] and result["range"][1] > result["range"][0] * 1.1
+    assert beat_hits(result["beats"], truth) > 0.9
+
+
+def test_beats_follow_a_sudden_tempo_change():
+    x, truth = varying_track(lambda t: 100 if t < 24 else 80)
+    result = chords.estimate_tempo(x)
+    assert result["varies"]
+    assert beat_hits(result["beats"], truth) > 0.85

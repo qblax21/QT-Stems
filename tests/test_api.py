@@ -224,3 +224,25 @@ def test_backups_are_pruned_to_the_newest_ones(client, tmp_path):
     for _ in range(b.KEEP + 3):
         b.make_backup(backend.BACKUP_DIR, backend.STEMS_DIR, backend.SESSIONS_FILE)
     assert len(b.list_backups(backend.BACKUP_DIR)) == b.KEEP
+
+
+# ---- original detail -----------------------------------------------------------------------------------------
+
+def test_detail_endpoint_reports_missing_original_and_remembers_refusals(client, monkeypatch):
+    song = make_song(client)
+    (backend.LIBRARY_DIR / f"{song}.mp3").unlink()
+    assert client.post(f"/api/detail/{song}").json()["status"] == "no-original"
+    assert client.post("/api/detail/0000000000").status_code == 404
+
+    (backend.LIBRARY_DIR / f"{song}.mp3").write_bytes(b"y" * 50)
+    calls = []
+
+    def refuse(*a, **k):
+        calls.append(1)
+        raise backend.fidelity.Mismatch("not the same song")
+
+    monkeypatch.setattr(backend.fidelity, "build_detail", refuse)
+    monkeypatch.setattr(backend.shutil, "which", lambda name: "ffmpeg")
+    assert client.post(f"/api/detail/{song}").json()["status"] == "skipped"
+    assert client.post(f"/api/detail/{song}").json()["status"] == "skipped"
+    assert len(calls) == 1                                   # the refusal is remembered, no second attempt

@@ -126,6 +126,7 @@
     <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
     <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
     <div class="row"><span class="subtle" id="songTempo">Song tempo: not analyzed yet</span><button class="smallBtn" id="useTempoBtn" disabled>Use it</button></div>
+    <div class="row"><span>Click style</span><select id="clickStyle"><option value="follow">Follows tempo changes</option><option value="steady">Steady grid</option></select></div>
     <div class="row"><span>Click follows the song</span><button class="toggle" id="syncToggle" aria-label="Play the click on the song's beats"><span></span></button></div>
     <div class="row"><span>Count-in before play</span><select id="countIn"><option value="0">Off</option><option value="1">1 bar</option><option value="2">2 bars</option></select></div>
   </div>
@@ -133,7 +134,7 @@
     <div class="row"><strong>Part to play</strong><button class="toggle" id="coverToggle" aria-label="Mute the part to play"><span></span></button></div>
     <div class="grid3" id="targetGrid"><button class="pill active">Guitar</button><button class="pill">Bass</button><button class="pill">Drums</button><button class="pill">Vocals</button><button class="pill">Piano</button><button class="pill">Other</button></div>
   </div>
-  <div class="card stack" data-tool="mixer" data-title="Stem mixer"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
+  <div class="card stack" data-tool="mixer" data-title="Stem mixer"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><button class="secondary" id="origMixBtn">Original mix (all up, nothing muted)</button><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
   <div class="card stack" data-tool="notes" data-title="Practice notes"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
   <div class="card stack" data-tool="log" data-title="Practice log"><div class="row"><strong>Practice log</strong><span class="subtle" id="logSummary">–</span></div><div class="stack" id="logBody" style="gap:.35rem"></div></div>
   <div class="stack" data-tool="actions" data-title="Save &amp; download"><div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
@@ -150,6 +151,7 @@
 <script type="text/plain" id="qtWorklet">
 // Quick Tune player: mixes every stem inside one AudioWorklet so they share a single sample clock.
 // Speed changes use WSOLA time-stretching (pitch is preserved); speed 1.0 copies samples exactly.
+const K = 1 / 32768; // stems are held as 16-bit integers
 class QTPlayer extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -234,7 +236,7 @@ class QTPlayer extends AudioWorkletProcessor {
         const gs = g[s] += (t[s] - g[s]) * 0.01, a = Ls[s];
         if (p < a.length) { l += a[p] * gs; r += Rs[s][p] * gs; }
       }
-      L[i] = l; R[i] = r; this.pos = p + 1;
+      L[i] = l * K; R[i] = r * K; this.pos = p + 1;
     }
   }
   stretch(L, R, n) {
@@ -250,7 +252,7 @@ class QTPlayer extends AudioWorkletProcessor {
         const l0 = k < 0 ? this.lastL[s] : aL[k], r0 = k < 0 ? this.lastR[s] : aR[k];
         l += (l0 + (aL[k + 1] - l0) * f) * gs; r += (r0 + (aR[k + 1] - r0) * f) * gs;
       }
-      L[i] = l; R[i] = r; this.outRead += step;
+      L[i] = l * K; R[i] = r * K; this.outRead += step;
     }
   }
   monoAt(i) {
@@ -318,7 +320,7 @@ const navButtons=[...document.querySelectorAll('.footerNav button')];
 const masterAudio=$('masterAudio'); // only used to preview the original upload before stems exist
 const waveCanvas=$('waveCanvas'), waveWrap=$('waveWrap'), ctx=waveCanvas.getContext('2d');
 const steps=[{label:'Upload song',w:5},{label:'Wait in queue',w:2},{label:'Split into stems (Demucs)',w:55},{label:'Encode & save stems',w:10},{label:'Download + prepare stems on this device',w:28}]; const stepPct=steps.map(()=>0), stepIndet=steps.map(()=>false); let stepActive=-1;
-const stemDefaults={Vocals:{volume:78,mute:false,solo:false,url:''},Drums:{volume:72,mute:false,solo:false,url:''},Bass:{volume:72,mute:false,solo:false,url:''},Guitar:{volume:78,mute:false,solo:false,url:''},Piano:{volume:64,mute:false,solo:false,url:''},Other:{volume:78,mute:false,solo:false,url:''}};
+const stemDefaults={Vocals:{volume:100,mute:false,solo:false,url:''},Drums:{volume:100,mute:false,solo:false,url:''},Bass:{volume:100,mute:false,solo:false,url:''},Guitar:{volume:100,mute:false,solo:false,url:''},Piano:{volume:100,mute:false,solo:false,url:''},Other:{volume:100,mute:false,solo:false,url:''},Detail:{volume:100,mute:false,solo:false,url:'',mode:'auto'}};
 let selectedModel='htdemucs', selectedDevice='cpu', selectedTarget='Guitar', coverMode=true, loopEnabled=true, speed=1, loopA=0, loopB=1, loopReps=0, dragMode=null, waveformData=null, sessions=[], fileName='No song loaded', objectUrl=null, scrubbing=false;
 const stemState=structuredClone(stemDefaults);
 
@@ -370,8 +372,8 @@ function engineReset(){
   if(engine.ac){engine.ac.close().catch(()=>{}); engine.ac=null;}
   setPlayLabel(false);}
 function pickFormat(dur,n){
-  const budget=380e6;
-  for(const [r,c] of [[44100,2],[32000,2],[24000,2],[22050,2],[32000,1],[22050,1]]) if(dur*r*4*c*n<=budget) return {rate:r,ch:c};
+  const phone=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent), budget=phone?380e6:900e6; // bytes of 16-bit samples
+  for(const [r,c] of [[44100,2],[32000,2],[24000,2],[44100,1],[32000,1],[22050,1]]) if(dur*r*2*c*n<=budget) return {rate:r,ch:c};
   return {rate:16000,ch:1};}
 function probeDuration(blob){return new Promise(res=>{const a=new Audio(), u=URL.createObjectURL(blob); const done=d=>{URL.revokeObjectURL(u); res(isFinite(d)?d:0);}; a.preload='metadata'; a.onloadedmetadata=()=>done(a.duration); a.onerror=()=>done(0); a.src=u; setTimeout(()=>done(0),5000);});}
 // AudioWorklet only exists on HTTPS or localhost pages. Over plain http:// (phone -> PC on your LAN/Tailscale) we run the exact
@@ -410,12 +412,14 @@ async function prepareEngine(gen){
     for(const name of names){
       const buf=await ac.decodeAudioData(await blobs[name].arrayBuffer());
       if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
-      const l=new Float32Array(buf.length); let r=l;
-      if(fmt.ch===2&&buf.numberOfChannels>1){r=new Float32Array(buf.length); buf.copyFromChannel(l,0); buf.copyFromChannel(r,1);}
-      else if(buf.numberOfChannels>1){buf.copyFromChannel(l,0); const t=new Float32Array(buf.length); buf.copyFromChannel(t,1); for(let i=0;i<l.length;i++) l[i]=(l[i]+t[i])*.5;}
-      else buf.copyFromChannel(l,0);
-      const block=Math.max(1,Math.floor(buf.length/600));
-      for(let i=0;i<600;i++){let s=0,c=0; for(let j=i*block;j<Math.min(buf.length,(i+1)*block);j+=16){s+=Math.abs(l[j]);c++;} peaks[i]+=s/Math.max(1,c);}
+      const n=buf.length, c0=buf.getChannelData(0), c1=buf.numberOfChannels>1?buf.getChannelData(1):null;
+      const toI16=src=>{const o=new Int16Array(n); for(let i=0;i<n;i++){const v=src[i]*32767; o[i]=v>32767?32767:v<-32768?-32768:v;} return o;};
+      let l,r;
+      if(fmt.ch===2){l=toI16(c0); r=c1?toI16(c1):l;}
+      else if(c1){l=new Int16Array(n); for(let i=0;i<n;i++){const v=(c0[i]+c1[i])*16383.5; l[i]=v>32767?32767:v<-32768?-32768:v;} r=l;}
+      else{l=toI16(c0); r=l;}
+      const block=Math.max(1,Math.floor(n/600));
+      for(let i=0;i<600;i++){let t=0,c=0; for(let j=i*block;j<Math.min(n,(i+1)*block);j+=16){t+=Math.abs(l[j]);c++;} peaks[i]+=t/Math.max(1,c)/32768;}
       maxLen=Math.max(maxLen,buf.length);
       node.port.postMessage({type:'load',name,l,r},r===l?[l.buffer]:[l.buffer,r.buffer]);
       delete blobs[name]; engine.decoded++; updateHydrationUI();
@@ -426,7 +430,7 @@ async function prepareEngine(gen){
     engine.ready=true; engine.pos=0; engine.posAt=performance.now();
     engine.post({type:'rate',r:speed}); engine.post({type:'pitch',p:Math.pow(2,pitchSteps/12)}); updateMix(); engineLoop();
     $('timeDur').textContent=formatTime(engine.dur); updateLoopUI(); updatePlayhead();
-    $('diag').textContent=`player: ${engine.mode} ·${(engine.rate/1000).toFixed(engine.rate%1000?1:0)} kHz ${fmt.ch===1?'mono':'stereo'} · ${names.length} stems · ~${Math.round(engine.dur*engine.rate*4*fmt.ch*names.length/1e6)} MB`;
+    $('diag').textContent=`player: ${engine.mode} ·${(engine.rate/1000).toFixed(engine.rate%1000?1:0)} kHz ${fmt.ch===1?'mono':'stereo'} · ${names.length} stems · ~${Math.round(engine.dur*engine.rate*2*fmt.ch*names.length/1e6)} MB`;
   }catch(e){engine.error=e&&e.message||String(e); console.error(e);}
   updateHydrationUI();}
 
@@ -445,16 +449,27 @@ function pointerToRatio(clientX){const rect=waveWrap.getBoundingClientRect(); re
 /* ---------- mixer ---------- */
 function setTarget(name){selectedTarget=name; document.querySelectorAll('#targetGrid .pill').forEach(btn=>btn.classList.toggle('active',btn.textContent.trim()===name)); $('modeStatus').textContent=`${name} muted`; document.querySelectorAll('#stemList [data-cover]').forEach(b=>b.classList.toggle('active',b.dataset.cover===name)); updateMix();}
 function stemKeys(){return Object.keys(stemState)}
-function renderStemList(){const host=$('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?'loading…':'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);}); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
-function updateMix(){const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n); const g={}; for(const [name,s] of Object.entries(stemState)){let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode&&name===selectedTarget) vol=0;} g[name]=vol;} engine.post({type:'gains',g});}
+function detailLabel(){const d=stemState.Detail, g=mixGains().Detail; return d.mode==='off'?'Off':d.mode==='on'?'On':(g>0?'Auto: on':'Auto: off');}
+function refreshDetailRow(){const b=document.querySelector('[data-detailmode]'); if(b) b.textContent=detailLabel();}
+function renderStemList(){const host=$('stemList'); host.innerHTML=''; stemKeys().forEach(name=>{const s=stemState[name]; if(name==='Detail'&&!s.url) return; const row=document.createElement('div'); row.className='stem'; row.dataset.stemrow=name; row.innerHTML=name==='Detail'?`<div><div class="stemName">Original detail</div><div class="stemSub">${s.url?(hydr[name]&&hydr[name].done?'ready':'loading…'):'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="cover" data-detailmode="1" title="What the split missed, so everything together equals your upload. Auto plays it only while nothing is muted.">${detailLabel()}</button></div>`:`<div><div class="stemName">${name}</div><div class="stemSub">${s.url?(hydr[name]&&hydr[name].done?'ready':'loading…'):'no stem'}</div><div class="mbar"><i></i></div></div><div class="stemGain"><input type="range" min="0" max="100" value="${s.volume}" data-vol="${name}"><span class="subtle">${s.volume}</span></div><div class="miniControls"><button class="solo ${s.solo?'active':''}" data-solo="${name}">S</button><button class="mute ${s.mute?'active':''}" data-mute="${name}">M</button><button class="cover ${selectedTarget===name?'active':''}" data-cover="${name}">Cover</button></div>`; host.appendChild(row);});
+  host.querySelectorAll('[data-detailmode]').forEach(el=>el.addEventListener('click',()=>{const d=stemState.Detail; d.mode=d.mode==='auto'?'on':d.mode==='on'?'off':'auto'; updateMix();})); host.querySelectorAll('[data-vol]').forEach(el=>el.addEventListener('input',e=>{const name=e.currentTarget.dataset.vol; stemState[name].volume=Number(e.currentTarget.value); e.currentTarget.nextElementSibling.textContent=stemState[name].volume; updateMix();})); host.querySelectorAll('[data-solo]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.solo; stemState[name].solo=!stemState[name].solo; e.currentTarget.classList.toggle('active',stemState[name].solo); updateMix();})); host.querySelectorAll('[data-mute]').forEach(el=>el.addEventListener('click',e=>{const name=e.currentTarget.dataset.mute; stemState[name].mute=!stemState[name].mute; e.currentTarget.classList.toggle('active',stemState[name].mute); updateMix();})); host.querySelectorAll('[data-cover]').forEach(el=>el.addEventListener('click',e=>setTarget(e.currentTarget.dataset.cover)));}
+// Every stem plays at its own level. "Original detail" is what the split missed (original minus all stems): in Auto it is
+// heard only while nothing is muted or soloed, so the full mix equals the upload and a muted part really is gone.
+function mixGains(){
+  const inst=Object.entries(stemState).filter(([n])=>n!=='Detail'), soloed=inst.filter(([,s])=>s.solo).map(([n])=>n); const g={};
+  for(const [name,s] of inst){let vol=s.volume/100; if(soloed.length) vol=soloed.includes(name)?vol:0; else {if(s.mute) vol=0; if(coverMode&&name===selectedTarget) vol=0;} g[name]=vol;}
+  const d=stemState.Detail; if(d&&d.url){const anyCut=soloed.length||inst.some(([n,s])=>s.url&&(s.mute||(coverMode&&n===selectedTarget))); g.Detail=d.mode==='off'?0:(d.mode==='on'||!anyCut)?d.volume/100:0;}
+  return g;}
+function updateMix(){engine.post({type:'gains',g:mixGains()}); if(typeof refreshDetailRow==='function') refreshDetailRow();}
+$('origMixBtn').addEventListener('click',()=>{for(const [n,st] of Object.entries(stemState)) Object.assign(st,{volume:100,mute:false,solo:false},n==='Detail'?{mode:'auto'}:{}); coverMode=false; applyCoverUI(); renderStemList(); updateHydrationUI(); updateMix();});
 function setSpeed(v){speed=v; masterAudio.playbackRate=speed; if(engine.ready){engine.pos=curTime(); engine.posAt=performance.now(); engine.post({type:'rate',r:speed});} $('speedValue').textContent=`${Math.round(speed*100)}%`; $('rateLabel').textContent=`Speed ${Math.round(speed*100)}%`;}
 
 /* ---------- download the mix ---------- */
 $('mixDownloadBtn').addEventListener('click',async()=>{
   const btn=$('mixDownloadBtn'), note=$('mixDownloadNote'); const outputs={}; for(const [n,s] of Object.entries(stemState)) if(s.url) outputs[n.toLowerCase()]=s.url;
   const id=songKey(outputs); if(!id){note.textContent='Open a song from your library first.'; note.classList.remove('hidden'); return;}
-  const gains={}; const soloed=Object.entries(stemState).filter(([,s])=>s.solo).map(([n])=>n);
-  for(const [name,s] of Object.entries(stemState)){ if(!s.url) continue; let v=s.volume/100; if(soloed.length) v=soloed.includes(name)?v:0; else {if(s.mute) v=0; if(coverMode&&name===selectedTarget) v=0;} gains[s.url.split('/').pop().replace(/\.[^.]+$/,'')]=v; }
+  const gains={}, mg=mixGains();
+  for(const [name,s] of Object.entries(stemState)){ if(!s.url) continue; gains[s.url.split('/').pop().replace(/\.[^.]+$/,'')]=mg[name]; }
   btn.disabled=true; btn.textContent='Preparing MP3…'; note.classList.add('hidden');
   try{
     const res=await fetch(`${backendBase()}/api/export`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song_id:id,gains,speed,pitch:pitchSteps})});
@@ -557,9 +572,15 @@ function metroTick(){
   const T=harmony.data&&harmony.data.tempo;
   if(metro.sync&&T){ // click on the song's own beats; they stretch with the speed
     if(!isPlaying()) return;
-    const spb=60/T.bpm, now=metro.ac.currentTime, sp=curTime(), horizon=.12*speed;
+    const now=metro.ac.currentTime, sp=curTime(), horizon=.12*speed, down=T.down||0;
     if(sp<metro.lastSp-.05) metro.lastBeat=-1e9; metro.lastSp=sp;
-    for(let n=Math.ceil((sp-T.offset)/spb-1e-6);;n++){const bt=T.offset+n*spb; if(bt>sp+horizon) break; if(n<=metro.lastBeat) continue; metro.lastBeat=n; metroClick(now+Math.max(0,(bt-sp)/speed),((n%4)+4)%4===0);}
+    const beats=T.beats&&$('clickStyle').value==='follow'?T.beats:null;
+    if(beats){ // every beat the tracker found, so the click keeps up when the tempo moves
+      let lo=0,hi=beats.length; while(lo<hi){const m=(lo+hi)>>1; if(beats[m]<sp-.001) lo=m+1; else hi=m;}
+      for(let i=lo;i<beats.length&&beats[i]<=sp+horizon;i++){if(i<=metro.lastBeat) continue; metro.lastBeat=i; metroClick(now+Math.max(0,(beats[i]-sp)/speed),(((i-down)%4)+4)%4===0);}
+      return;}
+    const spb=60/T.bpm;
+    for(let n=Math.ceil((sp-T.offset)/spb-1e-6);;n++){const bt=T.offset+n*spb; if(bt>sp+horizon) break; if(n<=metro.lastBeat) continue; metro.lastBeat=n; metroClick(now+Math.max(0,(bt-sp)/speed),(((n-down)%4)+4)%4===0);}
     return;}
   while(metro.next<metro.ac.currentTime+.12){metroClick(metro.next,metro.beat%4===0); metro.next+=60/metro.bpm; metro.beat++;}}
 function metroToggle(){
@@ -574,15 +595,16 @@ setToggle($('syncToggle'),false);
 $('syncToggle').addEventListener('click',()=>{if(!(harmony.data&&harmony.data.tempo)){harmonyMessage('The song tempo is not known yet.'); return;} metro.sync=!metro.sync; metro.lastBeat=-1e9; setToggle($('syncToggle'),metro.sync);});
 function songTempo(){const T=harmony.data&&harmony.data.tempo; return T&&T.confidence>=.3?T:null;}
 function renderTempo(){const T=harmony.data&&harmony.data.tempo, ok=!!songTempo();
-  $('songTempo').textContent=!harmony.data?'Song tempo: not analyzed yet':!T?'Song tempo: could not be found':`Song tempo: ${T.bpm} BPM${ok?'':' (unsure)'}`;
+  $('songTempo').textContent=!harmony.data?'Song tempo: not analyzed yet':!T?'Song tempo: could not be found':`Song tempo: ${T.bpm} BPM${T.varies?` (moves ${Math.round(T.range[0])}–${Math.round(T.range[1])})`:''}${ok?'':' (unsure)'}`;
   $('useTempoBtn').disabled=!T;}
 $('useTempoBtn').addEventListener('click',()=>{const T=harmony.data&&harmony.data.tempo; if(T) setBpm(T.bpm);});
+function localBpm(){const T=songTempo(); if(!T||!T.beats||T.beats.length<6) return 0; const sp=curTime(), b=T.beats; let lo=0,hi=b.length-1; while(lo<hi){const m=(lo+hi)>>1; if(b[m]<sp) lo=m+1; else hi=m;} const i=Math.max(0,Math.min(lo,b.length-5)); return 60*4/(b[i+4]-b[i]);}
 const countState={run:null};
 async function countIn(){
   const bars=Number($('countIn').value); if(!bars) return true;
   if(!metro.ac) metro.ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
   await metro.ac.resume();
-  const T=songTempo(), gap=60/((T?T.bpm:metro.bpm)*speed), beats=bars*4, t0=metro.ac.currentTime+.08;
+  const T=songTempo(), gap=60/((localBpm()||(T?T.bpm:metro.bpm))*speed), beats=bars*4, t0=metro.ac.currentTime+.08;
   const run={cancel:false,osc:[]}; countState.run=run; setPlayLabel(true);
   for(let i=0;i<beats;i++) run.osc.push(metroClick(t0+i*gap,i%4===0));
   await new Promise(r=>setTimeout(r,(.08+beats*gap)*1000));
@@ -633,7 +655,7 @@ $('hydrateRetry').addEventListener('click',()=>{engine.error=null; for(const n o
 function setStemUrls(outputs){
   const base=backendBase();
   const absolutize=url=>{if(!url) return ''; if(url.startsWith('http://')||url.startsWith('https://')) return url; if(url.startsWith('/')) return `${base}${url}`; return `${base}/${url}`;};
-  const map={Vocals:absolutize(outputs.vocals||''),Drums:absolutize(outputs.drums||''),Bass:absolutize(outputs.bass||''),Guitar:absolutize(outputs.guitar||''),Piano:absolutize(outputs.piano||''),Other:absolutize(outputs.other||outputs.instrumental||Object.entries(outputs).find(([k])=>k.startsWith('no_'))?.[1]||'')};
+  const map={Vocals:absolutize(outputs.vocals||''),Drums:absolutize(outputs.drums||''),Bass:absolutize(outputs.bass||''),Guitar:absolutize(outputs.guitar||''),Piano:absolutize(outputs.piano||''),Other:absolutize(outputs.other||outputs.instrumental||Object.entries(outputs).find(([k])=>k.startsWith('no_'))?.[1]||''),Detail:absolutize(outputs.detail||'')};
   masterAudio.pause();
   Object.entries(map).forEach(([name,url])=>{stemState[name].url=url;});
   startHydration(map);
@@ -684,19 +706,28 @@ function snapshot(){
   const outputs={}; for(const [n,s] of Object.entries(stemState)) if(s.url) outputs[n.toLowerCase()]=relUrl(s.url);
   if(!Object.keys(outputs).length) return null;
   return {title:`${fileName} — ${selectedTarget}`,fileName,model:selectedModel,device:selectedDevice,target:selectedTarget,coverMode,speed,pitch:pitchSteps,bpm:metro.bpm,marks,dur:curDur()||0,
-    loop:{a:loopA,b:loopB,enabled:loopEnabled},mix:Object.fromEntries(Object.entries(stemState).map(([n,s])=>[n,{volume:s.volume,mute:s.mute,solo:s.solo}])),
+    loop:{a:loopA,b:loopB,enabled:loopEnabled},mix:Object.fromEntries(Object.entries(stemState).map(([n,s])=>[n,{volume:s.volume,mute:s.mute,solo:s.solo,mode:s.mode}])),
     outputs,notes:$('notes').value.trim(),savedAt:Date.now()};}
 function applyCoverUI(){$('coverToggle').style.background=coverMode?'rgba(109,170,69,.24)':'rgba(122,121,116,.22)'; document.querySelector('#coverToggle span').style.transform=coverMode?'translateX(24px)':'translateX(0)';}
 function restoreSnapshot(s){
   const outputs=s.outputs||Object.fromEntries(Object.entries(s.stems||{}).map(([k,v])=>[k.toLowerCase(),v]));
   fileName=s.fileName||String(s.title||'Saved song').split(' — ')[0]; $('songTitle').textContent=fileName;
   document.querySelector(`#modelGrid [data-model="${s.model}"]`)?.click(); document.querySelector(`#deviceGrid [data-device="${s.device}"]`)?.click();
-  for(const n of Object.keys(stemState)) Object.assign(stemState[n],{volume:stemDefaults[n].volume,mute:false,solo:false}, s.mix&&s.mix[n]?{volume:Number(s.mix[n].volume),mute:!!s.mix[n].mute,solo:!!s.mix[n].solo}:{});
+  for(const n of Object.keys(stemState)) Object.assign(stemState[n],{volume:stemDefaults[n].volume,mute:false,solo:false,...(n==='Detail'?{mode:'auto'}:{})}, s.mix&&s.mix[n]?{volume:Number(s.mix[n].volume),mute:!!s.mix[n].mute,solo:!!s.mix[n].solo,...(n==='Detail'?{mode:['auto','on','off'].includes(s.mix[n].mode)?s.mix[n].mode:'auto'}:{})}:{});
   coverMode=s.coverMode!==false; applyCoverUI(); selectedTarget=s.target||selectedTarget;
   loopA=Number(s.loop&&s.loop.a)||0; loopB=s.loop&&s.loop.b>loopA?Number(s.loop.b):1; loopEnabled=!s.loop||s.loop.enabled!==false; $('loopToggle').textContent=loopEnabled?'Loop On':'Loop Off'; loopReps=0; $('repsCount').textContent='0x';
   const sp=typeof s.speed==='string'?parseFloat(s.speed)/100:Number(s.speed); setSpeed(sp>=.5&&sp<=1.5?sp:1);
   setPitch(Number(s.pitch)||0); marks=Array.isArray(s.marks)?s.marks.filter(m=>m&&typeof m.name==='string'&&m.b>m.a):[]; renderMarks(); setBpm(Number(s.bpm)||100); $('notes').value=s.notes||''; waveformData=null;
   setStemUrls(outputs); showScreen('practice');}
+const _restoreSnapshot=restoreSnapshot;
+restoreSnapshot=async function(s){
+  const outs=s.outputs||Object.fromEntries(Object.entries(s.stems||{}).map(([k,v])=>[k.toLowerCase(),v])), id=(Object.values(outs).map(u=>/\/stems\/([0-9a-f]{10})\//.exec(u||'')).find(Boolean)||[])[1];
+  if(id&&!outs.detail){
+    const notes=[$('libraryNote'),$('songMeta')], old=notes.map(n=>n.textContent); notes[0].classList.remove('hidden');
+    notes.forEach(n=>n.textContent='Matching this song to your original upload (about 15 seconds, only the first time)…');
+    try{const r=await fetch(`${backendBase()}/api/detail/${id}`,{method:'POST'}); const d=await r.json(); if(d.status==='ready'||d.status==='exists') s={...s,outputs:{...outs,detail:`/stems/${id}/detail.mp3`}};}catch{}
+    notes.forEach((n,i)=>n.textContent=old[i]); notes[0].classList.add('hidden');}
+  return _restoreSnapshot(s);};
 const newId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 // Sessions live on the PC (so phone and computer share them) with a copy in this browser as a fallback.
 let deletedIds=LS.get('qt.deleted',[]); if(!Array.isArray(deletedIds)) deletedIds=[];

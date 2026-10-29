@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-VERSION = 2
+VERSION = 3
 TEMPO_HOP = 256
 TEMPO_NFFT = 1024
 SR = 11025
@@ -111,9 +111,9 @@ def estimate_key(chroma_mean: np.ndarray):
     return best[1], best[2], float(max(0.0, min(1.0, (best[0] - second[0]) * 4)))
 
 
-def onset_envelope(x: np.ndarray, sr: int = SR) -> np.ndarray:
+def onset_envelope(x: np.ndarray, sr: int = SR, lo: float = 40.0, hi: float = 5000.0) -> np.ndarray:
     """Spectral-flux onset strength per TEMPO_HOP samples, with the slow average removed and scaled to 0..1."""
-    mags, _ = _band_magnitudes(x, TEMPO_NFFT, 40.0, 5000.0, hop=TEMPO_HOP, sr=sr)
+    mags, _ = _band_magnitudes(x, TEMPO_NFFT, lo, hi, hop=TEMPO_HOP, sr=sr)
     flux = np.concatenate([[0.0], np.maximum(np.diff(mags, axis=0), 0).sum(axis=1)])
     w = max(3, int(round(0.5 * sr / TEMPO_HOP)) | 1)
     env = np.maximum(flux - np.convolve(flux, np.ones(w) / w, mode="same"), 0)
@@ -129,6 +129,89 @@ def _comb(env: np.ndarray, period: float, phases: np.ndarray) -> np.ndarray:
     ok = pos < n
     vals = np.where(ok, env[np.minimum(pos, n - 1)], 0.0)
     return vals.sum(axis=1) / np.maximum(ok.sum(axis=1), 1)
+
+
+def _local_periods(env: np.ndarray, fps: float, global_bpm: float, jump_cost: float = 80.0) -> np.ndarray:
+    """Beat period (frames) at every frame. Each sliding 8 s window scores every tempo by autocorrelation; a Viterbi
+    pass then picks one tempo per window, so the tempo can change when the evidence is strong and sustained but
+    does not flip between octaves or triplet feels from window to window."""
+    n = len(env)
+    win, hop = int(8 * fps), int(1 * fps)
+    bpms = np.arange(45.0, 230.0, 1.0)
+    lags = fps * 60.0 / bpms
+    prior = np.exp(-0.5 * (np.log2(bpms / global_bpm) / 0.3) ** 2)
+    hann = np.hanning(win)
+    centers, emit = [], []
+    for start in range(0, max(1, n - win + 1), hop):
+        seg = env[start:start + win]
+        if len(seg) < win:
+            break
+        spec = np.fft.rfft((seg - seg.mean()) * hann, 2 * win)
+        ac = np.fft.irfft(np.abs(spec) ** 2)[:win]
+        ac = ac / np.maximum(win - np.arange(win), 1)
+        sc = np.maximum(np.interp(lags, np.arange(win), ac), 0) * prior
+        emit.append(np.log(sc / sc.max() + 0.05) if sc.max() > 0 else np.zeros(len(bpms)))
+        centers.append(start + win / 2)
+    if not emit:
+        return np.full(n, fps * 60.0 / global_bpm)
+    emit = np.array(emit)
+    trans = -jump_cost * (np.log2(bpms[:, None] / bpms[None, :])) ** 2
+    delta, back = emit[0].copy(), np.zeros(emit.shape, dtype=np.int64)
+    for i in range(1, len(emit)):
+        cand = delta[None, :] + trans            # [to, from]
+        back[i] = cand.argmax(axis=1)
+        delta = cand.max(axis=1) + emit[i]
+    path = np.empty(len(emit), dtype=np.int64)
+    path[-1] = int(delta.argmax())
+    for i in range(len(emit) - 1, 0, -1):
+        path[i - 1] = back[i, path[i]]
+    return fps * 60.0 / np.interp(np.arange(n), centers, bpms[path])
+
+
+def regularize_beats(frames: np.ndarray, env: np.ndarray, period: np.ndarray) -> np.ndarray:
+    """Drop a beat that lands much too close to its neighbour (keep the stronger onset) and fill holes with evenly
+    spaced beats, so a click never stutters or goes quiet for a bar."""
+    out = [float(frames[0])]
+    for f in frames[1:]:
+        p = float(period[min(int(f), len(period) - 1)])
+        if f - out[-1] < 0.7 * p:
+            if env[min(int(round(f)), len(env) - 1)] > env[min(int(round(out[-1])), len(env) - 1)] and len(out) > 1 and f - out[-2] > 0.7 * p:
+                out[-1] = float(f)
+            continue
+        gap = f - out[-1]
+        if gap > 1.5 * p:
+            k = int(round(gap / p))
+            out.extend(out[-1] + gap * j / k for j in range(1, k))
+        out.append(float(f))
+    return np.array(out)
+
+
+def track_beats(env: np.ndarray, period: np.ndarray, tightness: float = 60.0) -> np.ndarray:
+    """Dynamic-programming beat tracker (Ellis 2007): pick onsets that are strong and spaced like the local period."""
+    n = len(env)
+    e = env / (env.std() or 1.0)
+    score = np.zeros(n)
+    back = np.full(n, -1, dtype=np.int64)
+    for t in range(n):
+        p = period[t]
+        lo, hi = max(0, int(round(t - 2 * p))), int(round(t - p / 2))
+        if hi < lo or hi < 0:
+            score[t] = e[t]
+            continue
+        prev = np.arange(lo, hi + 1)
+        cand = score[prev] - tightness * np.log((t - prev) / p) ** 2
+        j = int(cand.argmax())
+        if cand[j] > 0:
+            score[t] = e[t] + cand[j]; back[t] = prev[j]
+        else:
+            score[t] = e[t]
+    tail = max(1, int(period[-1]))
+    t = n - tail + int(score[n - tail:].argmax())
+    beats = []
+    while t >= 0:
+        beats.append(t)
+        t = back[t]
+    return np.array(beats[::-1], dtype=float)
 
 
 def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
@@ -158,8 +241,32 @@ def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
             best = (float(c[i]), float(bpm), float(phases[i]))
     value, bpm, phase = best
     base = float(smooth.mean()) or 1e-9
-    return {"bpm": round(bpm, 1), "offset": round(phase / fps, 3),
-            "confidence": round(float(max(0.0, min(1.0, (value / base - 1.0) / 3.0))), 2)}
+    result = {"bpm": round(bpm, 1), "offset": round(phase / fps, 3),
+              "confidence": round(float(max(0.0, min(1.0, (value / base - 1.0) / 3.0))), 2)}
+    try:
+        period = _local_periods(env, fps, bpm)
+        frames = track_beats(smooth, period)
+        if len(frames) >= 8:
+            fi = frames.astype(int)
+            a, b, c = smooth[np.maximum(fi - 1, 0)], smooth[fi], smooth[np.minimum(fi + 1, n - 1)]
+            denom = a - 2 * b + c
+            frames = frames + np.clip(np.where(denom < -1e-9, 0.5 * (a - c) / np.where(denom < -1e-9, denom, -1.0), 0.0), -0.5, 0.5)
+            frames = regularize_beats(frames, smooth, period)
+            gaps = np.diff(frames) / fps
+            local_bpm = 60.0 / np.convolve(gaps, np.ones(4) / 4, mode="valid")
+            beat_env = float(smooth[frames.astype(int)].mean())
+            result["bpm"] = round(float(60.0 * (len(frames) - 1) / (frames[-1] - frames[0]) * fps), 1)
+            result["offset"] = round(float(frames[0] / fps), 3)
+            result["confidence"] = round(float(max(0.0, min(1.0, (beat_env / base - 1.0) / 3.0))), 2)
+            result["beats"] = [round(float(f / fps), 3) for f in frames]
+            result["range"] = [round(float(np.percentile(local_bpm, 5)), 1), round(float(np.percentile(local_bpm, 95)), 1)]
+            result["varies"] = bool(result["range"][1] / max(result["range"][0], 1e-9) > 1.1)
+            kick = onset_envelope(x, sr, 40.0, 220.0)[:n]
+            idx = np.minimum(frames.astype(int), len(kick) - 1)
+            result["down"] = int(np.argmax([kick[idx[k::4]].sum() for k in range(4)]))
+    except Exception:  # the steady-tempo answer above is still good
+        pass
+    return result
 
 
 def _diatonic(tonic: int, mode: str) -> np.ndarray:
@@ -279,6 +386,7 @@ def analyze_signal(harm: np.ndarray, bass: np.ndarray | None = None, sr: int = S
 
 def pick_stems(files: dict) -> tuple[list, list]:
     """Which stem files carry the harmony and which the bass. Drums and vocals are left out."""
+    files = {n: p for n, p in files.items() if n != "detail"}  # the residual track is not an instrument
     harm = [p for n, p in files.items() if n not in ("drums", "vocals", "bass")]
     bass = [p for n, p in files.items() if n == "bass"]
     if not harm:

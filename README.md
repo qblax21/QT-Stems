@@ -11,7 +11,8 @@ A self-hosted music practice app. Upload a song, split it into stems with [Demuc
 - **Library** on your PC shared by every device: search, rename, delete (one or many), storage used, and "Practice again" that restores your last loop, speed, mix and notes.
 - **Saved sessions** that live on the PC and sync between phone and computer.
 - **Key and chords:** the PC estimates the song's key and its chord progression from the stems. See the current and next chord while it plays, tap any chord to jump to it, switch to Roman numerals, and the chords follow your key shift.
-- **Tempo and click:** the song's BPM is detected and sets the metronome automatically. The click can follow the song's own beats (and stretches with the speed), and an optional 1 or 2 bar count-in plays before you start.
+- **Tempo and click:** the song's beats are tracked, not just its average BPM, so the click can keep up when the tempo moves (or use a steady grid instead). The click stretches with the speed, the first beat of each bar is accented, and an optional 1 or 2 bar count-in plays at the tempo where you are.
+- **Sounds like the upload:** every song gets an "Original detail" track (the upload minus the sum of the stems), made once on the PC the first time you open it. With everything up and nothing muted you hear your original file; muting a part removes it from the original. "Original mix" in the Stem mixer resets to that. Stems are held as 16-bit audio so long songs keep full quality (computers use 44.1 kHz stereo for almost any song, phones fall back to a lower rate only for very long ones).
 - **Loop by chord:** switch on "Loop chords", tap a chord to loop it, tap a second one to loop everything between them.
 - **Practice log:** time practiced per day and per song, loops, top speed, and your streak (kept on each device).
 - **Backup:** Settings has Back up now and Restore. The PC also saves one by itself daily in `backups/` (the newest 14 are kept). Song audio is not included.
@@ -73,13 +74,14 @@ Remove it with `Unregister-ScheduledTask QuickTuneServers`. Python is taken from
 "What to split" runs Demucs in two-stem mode: you get just the chosen part (vocals, drums, bass, guitar or piano) plus one backing track. Guitar and piano switch to the 6-stem model automatically. Demucs does not split beyond 6 stems. Pick GPU in the app only if CUDA-enabled PyTorch is installed (`python -c "import torch; print(torch.cuda.is_available())"`).
 
 ## How it works
+- `fidelity.py` aligns the upload with the stems (MP3 stems come back 1105 samples late) and writes `stems/<id>/detail.mp3`. If the two do not match it writes `detail.skip` and the song just plays without it.
 - The app uploads a song, then polls `/api/jobs/<id>` for real separation progress (Demucs runs in a background thread, one job at a time).
 - Stems are saved as 256 kbps MP3 under `stems/<id>/` with a `meta.json`; the original upload is kept in `library/`. Both are listed by the Library tab.
 - Stems are downloaded fully to the device before the practice controls unlock. Playback uses Web Audio: every stem is decoded in memory and mixed inside one AudioWorklet on a single sample clock, so mute/solo/seek are instant and loops are sample-accurate. Speed and key use WSOLA time-stretching (key shift = stretch, then resample), so each can change without affecting the other. Very long songs are decoded at a lower sample rate to stay within phone memory.
 - On plain `http` browsers hide AudioWorklet, so the same mixer runs on a `ScriptProcessorNode`. The line under "Stem mixer" shows which one is active.
 - Saved sessions (`sessions.json`) live on the PC; the browser keeps a local copy as a fallback. The last song and per-song practice state are remembered in the browser.
 - Downloading a mix renders the MP3 on the PC with ffmpeg.
-- Key and chords (`chords.py`, numpy only): the harmonic stems (not drums, vocals or bass) are mixed, folded into pitch-class energy with tuning correction, matched against major, minor, 7th and minor-7th chord templates, and smoothed with a Viterbi pass that favours chords in the detected key. The bass stem helps pick the root. The tempo comes from the drums stem (onset strength, autocorrelation, then a beat-grid fit); it assumes a steady tempo, so live songs that drift may not line up. The result is cached in `stems/<id>/chords.json`. It is an estimate, so check it by ear.
+- Key and chords (`chords.py`, numpy only): the harmonic stems (not drums, vocals or bass) are mixed, folded into pitch-class energy with tuning correction, matched against major, minor, 7th and minor-7th chord templates, and smoothed with a Viterbi pass that favours chords in the detected key. The bass stem helps pick the root. The tempo comes from the drums stem: onset strength, a tempo per 8 s window chosen with a Viterbi pass (so it can change but not flip between octaves), then a dynamic-programming beat tracker; the bar's first beat is guessed from the kick drum and assumes 4 beats per bar. The result is cached in `stems/<id>/chords.json`. It is an estimate, so check it by ear.
 
 ## Tests
 ```bash

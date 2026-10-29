@@ -19,6 +19,7 @@ from starlette.background import BackgroundTask
 
 import backup
 import chords
+import fidelity
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quick Tune Demucs Backend")
@@ -234,12 +235,56 @@ def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: 
                 log_error(traceback.format_exc())
 
             job.update(status="done", stage="done", percent=100.0, outputs=outputs)
+        threading.Thread(target=_detail_quietly, args=(job_id,), daemon=True).start()  # restore the original's detail in the background
     except BaseException as e:  # Demucs calls sys.exit() on some failures
         log_error(f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
         job.update(status="error", stage="error", error=str(e) or type(e).__name__)
     finally:
         _current["job"] = None
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+DETAIL_LOCK = threading.Lock()
+
+
+def ensure_detail(song_id: str) -> dict:
+    """Create stems/<id>/detail.mp3 (original minus the stems) once. Never raises for 'cannot do it' cases."""
+    song_dir = STEMS_DIR / song_id
+    out, skip = song_dir / "detail.mp3", song_dir / "detail.skip"
+    if out.exists():
+        return {"status": "exists"}
+    if skip.exists():
+        return {"status": "skipped", "reason": skip.read_text(encoding="utf-8")[:200]}
+    original = next((p for p in LIBRARY_DIR.glob(song_id + ".*")), None)
+    ffmpeg = shutil.which("ffmpeg")
+    if original is None or not ffmpeg:
+        return {"status": "no-original"}
+    with DETAIL_LOCK:
+        if out.exists():
+            return {"status": "exists"}
+        try:
+            info = fidelity.build_detail(song_dir, original, out, ffmpeg)
+        except fidelity.Mismatch as e:
+            skip.write_text(str(e), encoding="utf-8")
+            return {"status": "skipped", "reason": str(e)}
+        except Exception:
+            log_error(traceback.format_exc())
+            return {"status": "failed"}
+    return {"status": "ready", **info}
+
+
+def _detail_quietly(song_id: str):
+    try:
+        ensure_detail(song_id)
+    except Exception:
+        log_error(traceback.format_exc())
+
+
+@app.post("/api/detail/{song_id}")
+def make_detail(song_id: str):
+    if not JOB_ID_RE.match(song_id) or not (STEMS_DIR / song_id).is_dir():
+        raise HTTPException(status_code=404, detail="Unknown song")
+    return ensure_detail(song_id)
 
 
 @app.get("/api/health")
@@ -332,7 +377,7 @@ def library():
             p.stem.lower(): f"/stems/{d.name}/{p.name}"
             for p in d.iterdir()
             if p.is_file() and p.suffix.lower() in {".wav", ".mp3", ".flac"}
-            and p.stem.lower() in (BASE_STEMS | {"no_" + b for b in BASE_STEMS})
+            and p.stem.lower() in (BASE_STEMS | {"no_" + b for b in BASE_STEMS} | {"detail"})
         }
         if not outputs:
             continue
@@ -453,7 +498,7 @@ def export_mix(payload: dict):
         speed = min(2.0, max(0.5, float(payload.get("speed", 1.0))))
         semis = min(12.0, max(-12.0, float(payload.get("pitch", 0.0))))
         gains = payload.get("gains") or {}
-        names = BASE_STEMS | {"no_" + b for b in BASE_STEMS}
+        names = BASE_STEMS | {"no_" + b for b in BASE_STEMS} | {"detail"}
         files = []
         for name, g in gains.items():
             g = min(2.0, max(0.0, float(g)))
