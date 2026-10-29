@@ -43,7 +43,7 @@
     .libBar{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.libBar .smallBtn{padding:.5rem .7rem;font-size:.78rem}.smallBtn.danger{background:color-mix(in oklab,var(--error) 22%,var(--offset));color:var(--error)}.smallBtn:disabled{opacity:.45}.sessionCard.picked{border-color:var(--primary);background:color-mix(in oklab,var(--primary) 12%,var(--surface2))}
     .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
-    @media (max-width:540px){.app{padding:0}.phone{height:100dvh;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
+    @media (max-width:540px){html{background:var(--surface)}.app{padding:0}.phone{position:fixed;inset:0;width:auto;height:auto;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
     @media (display-mode:standalone) and (max-width:540px){.topbar{padding-top:calc(.2rem + max(env(safe-area-inset-top,0px),44px))}.footerNav{padding-bottom:calc(.1rem + max(env(safe-area-inset-bottom,0px),20px))}}
   </style>
 </head>
