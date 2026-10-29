@@ -38,6 +38,8 @@
     button,.pill,.mode,label.tertiary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none} .waveCanvas{touch-action:pan-y;cursor:pointer} .stemGain input{touch-action:pan-y}
     .offline{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:color-mix(in oklab,var(--warning) 22%,var(--surface));color:var(--text);font-size:.8rem;border-bottom:1px solid color-mix(in oklab,var(--warning) 50%,transparent)}.offline button{flex:none;padding:.4rem .8rem;border-radius:10px;background:var(--offset);font-weight:700;font-size:.78rem}
     .chips{display:flex;flex-wrap:wrap;gap:.45rem}.chip2{display:inline-flex;align-items:stretch;border-radius:999px;background:var(--offset);border:1px solid transparent;overflow:hidden}.chip2.active{background:var(--soft);border-color:color-mix(in oklab,var(--primary) 35%,transparent)}.chip2 button{padding:.5rem .7rem;font-size:.82rem;font-weight:700}.chip2 button+button{padding-left:.5rem;padding-right:.7rem;color:var(--muted);border-left:1px solid color-mix(in oklab,var(--text) 10%,transparent)}.chips .subtle{font-size:.82rem}
+    .tool.toolHidden{display:none!important}.toolHead{cursor:pointer;user-select:none;-webkit-user-select:none}.toolHead>strong:first-child::before{content:'BE';display:inline-block;width:1.15em;color:var(--primary)}.tool.collapsed>*:not(.toolHead){display:none!important}.tool.collapsed .toolHead>strong:first-child::before{content:'B8'}
+    .toolRow{display:flex;align-items:center;gap:.6rem;padding:.4rem .1rem}.toolRow label{flex:1;display:flex;align-items:center;gap:.6rem;font-size:.95rem}.toolRow input{width:1.25rem;height:1.25rem;accent-color:var(--primary)}.toolRow .smallBtn{min-width:2.4rem;padding:.45rem .6rem}.toolRow .smallBtn:disabled{opacity:.3}
     .chordNow{display:grid;grid-template-columns:1.4fr 1fr;gap:.5rem}.chordNow>div{padding:.7rem .8rem;border-radius:14px;background:var(--offset)}.chordNow .big{font-size:2rem;font-weight:800;line-height:1.15;color:var(--primary)}.chordNow .next .big{font-size:1.35rem;color:var(--text);opacity:.75}
     .chordStrip{display:flex;flex-wrap:wrap;gap:.35rem;max-height:9.2rem;overflow-y:auto;padding:.1rem;scroll-behavior:smooth}.chordChip{padding:.4rem .6rem;border-radius:10px;background:var(--offset);border:1px solid transparent;font-size:.86rem;font-weight:700;min-width:2.6rem;text-align:center}.chordChip.active{background:var(--primary);color:#fff}.chordChip.inloop{border-color:color-mix(in oklab,var(--primary) 45%,transparent)}
     .libBar{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.libBar .smallBtn{padding:.5rem .7rem;font-size:.78rem}.smallBtn.danger{background:color-mix(in oklab,var(--error) 22%,var(--offset));color:var(--error)}.smallBtn:disabled{opacity:.45}.sessionCard.picked{border-color:var(--primary);background:color-mix(in oklab,var(--primary) 12%,var(--surface2))}
@@ -82,51 +84,53 @@
 </section>
 <section class="screen hidden" id="practiceScreen">
   <div class="row"><div><h2 id="songTitle" style="font-size:1.35rem;line-height:1.1">No song loaded</h2><p id="songMeta" class="subtle">Split a song on the Import tab to begin.</p></div><div class="badge" id="modeStatus">Guitar muted</div></div>
+  <div class="row toolsBar"><span class="subtle" id="toolsSummary">All tools shown</span><button class="smallBtn" id="toolsBtn">Customize</button></div>
+  <div class="card stack hidden" id="toolsPanel"><div class="row"><strong>Tools</strong><span class="subtle">tick to show · arrows to move</span></div><div id="toolsList" class="stack" style="gap:.15rem"></div><div class="grid3"><button class="secondary" id="toolsCollapse">Collapse all</button><button class="secondary" id="toolsExpand">Expand all</button><button class="secondary" id="toolsReset">Reset</button></div></div>
   <div class="card stack hydrate hidden" id="hydrateBanner"><div class="row"><strong id="hydrateTitle">Loading stems…</strong><span class="subtle" id="hydratePct">0%</span></div><div class="bar"><i id="hydrateBar"></i></div><div class="note" id="hydrateNote">Controls unlock once every stem is on this device, so playback stays in sync.</div><button class="secondary hidden" id="hydrateRetry">Retry failed stems</button></div>
   <div class="meta"><div class="chip"><strong id="timeNow">0:00</strong><span>Now</span></div><div class="chip"><strong id="timeDur">0:00</strong><span>Length</span></div><div class="chip"><strong id="repsCount">0x</strong><span>Loop reps</span></div></div>
-  <div class="card stack">
+  <div class="card stack" data-tool="player" data-title="Waveform &amp; player" data-core="1">
     <div class="row"><span id="loopLabel" class="subtle">Loop 0:00 → 0:00</span><span id="rateLabel" class="subtle">Speed 100%</span></div>
     <div class="waveWrap" id="waveWrap"><canvas id="waveCanvas" class="waveCanvas" width="420" height="132"></canvas><div class="marker" id="markerA" style="left:0%"></div><div class="marker" id="markerB" style="left:100%"></div><div class="playhead" id="playhead" style="left:0%"></div></div>
     <div class="smallActions"><button class="smallBtn" id="setA">Set A</button><button class="smallBtn" id="setB">Set B</button><button class="smallBtn" id="loopToggle">Loop On</button></div>
     <div class="transport"><button id="back5">⟲5</button><button id="toA">To A</button><button class="play" id="playBtn">▶</button><button id="toB">To B</button><button id="fwd5">5⟳</button></div>
   </div>
-  <div class="card stack" id="harmonyCard">
+  <div class="card stack" id="harmonyCard" data-tool="chords" data-title="Key &amp; chords">
     <div class="row"><strong>Key &amp; chords</strong><span class="subtle" id="harmonyKey">–</span></div>
     <div class="chordNow"><div><div class="subtle">Now</div><div class="big" id="chordNow">–</div></div><div class="next"><div class="subtle">Next</div><div class="big" id="chordNext">–</div></div></div>
     <div class="chordStrip" id="chordStrip"></div>
     <div class="grid2"><button class="secondary" id="chordMode">Show numbers</button><button class="secondary" id="chordRefresh">Re-analyze</button></div>
     <div class="note" id="harmonyNote">Open a song from your library to see its key and chords.</div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="sections" data-title="Sections">
     <div class="row"><strong>Sections</strong><button class="smallBtn" id="markSave">+ Save loop</button></div>
     <div class="chips" id="markList"></div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="speed" data-title="Speed">
     <div class="row"><strong>Speed</strong><span class="subtle">pitch stays the same</span></div>
     <div class="speedRow"><button class="secondary" id="speedDown">− 5%</button><strong id="speedValue">100%</strong><button class="secondary" id="speedUp">+ 5%</button></div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="key" data-title="Key shift">
     <div class="row"><strong>Key</strong><span class="subtle">semitones · speed stays the same</span></div>
     <div class="speedRow"><button class="secondary" id="keyDown">− 1 st</button><strong id="keyValue">Original</strong><button class="secondary" id="keyUp">+ 1 st</button></div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="trainer" data-title="Speed trainer">
     <div class="row"><strong>Speed trainer</strong><button class="toggle" id="trainerToggle" aria-label="Raise the speed automatically each loop"><span></span></button></div>
     <div class="grid3"><div class="field"><label for="trStep">Raise by</label><select id="trStep"><option value="2">2%</option><option value="5" selected>5%</option><option value="10">10%</option></select></div><div class="field"><label for="trEvery">Every</label><select id="trEvery"><option value="1">1 loop</option><option value="2" selected>2 loops</option><option value="4">4 loops</option><option value="8">8 loops</option></select></div><div class="field"><label for="trMax">Up to</label><select id="trMax"><option value="80">80%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="110">110%</option><option value="125">125%</option></select></div></div>
     <div class="note" id="trainerNote">Off. Turn it on, set a loop, and start slow: the speed climbs each time the loop repeats.</div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="metronome" data-title="Metronome">
     <div class="row"><strong>Metronome</strong><span class="subtle">independent click</span></div>
     <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
     <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
   </div>
-  <div class="card stack">
+  <div class="card stack" data-tool="part" data-title="Part to play">
     <div class="row"><strong>Part to play</strong><button class="toggle" id="coverToggle" aria-label="Mute the part to play"><span></span></button></div>
     <div class="grid3" id="targetGrid"><button class="pill active">Guitar</button><button class="pill">Bass</button><button class="pill">Drums</button><button class="pill">Vocals</button><button class="pill">Piano</button><button class="pill">Other</button></div>
   </div>
-  <div class="card stack"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
-  <div class="card stack"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
-  <div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
-  <button class="secondary" id="mixDownloadBtn">Download this mix (MP3)</button><div class="note hidden" id="mixDownloadNote"></div>
+  <div class="card stack" data-tool="mixer" data-title="Stem mixer"><div class="row"><strong>Stem mixer</strong><span class="subtle" id="mixSummary">loading…</span></div><div class="stemList" id="stemList"></div><div class="subtle" id="diag" style="font-size:.7rem"></div></div>
+  <div class="card stack" data-tool="notes" data-title="Practice notes"><div class="field"><label for="notes">Practice notes</label><textarea id="notes" placeholder="Chorus at 80%. Solo is cleaner with guitar muted."></textarea></div></div>
+  <div class="stack" data-tool="actions" data-title="Save &amp; download"><div class="ctaGrid"><button class="primary" id="saveSessionBtn">Save session</button><button class="tertiary" id="exportCurrentBtn">Export</button></div>
+  <button class="secondary" id="mixDownloadBtn">Download this mix (MP3)</button><div class="note hidden" id="mixDownloadNote"></div></div>
 </section>
 <section class="screen hidden" id="libraryScreen"><div class="hero"><h1>Library</h1><p>Every song you split, from any device, is saved on your PC. Tap one to practice it without uploading again.</p></div><div class="field"><input id="libSearch" type="search" placeholder="Search songs" autocomplete="off" /></div><div class="note hidden" id="libraryNote"></div><div class="row"><span class="subtle" id="libStats"></span><div class="libBar" id="libBar"></div></div><div id="libraryList" class="stack"></div></section>
 <section class="screen hidden" id="sessionsScreen"><div class="hero"><h1>Saved sessions</h1><p>Sessions remember the song, loop, speed, mix and notes. They are kept in this browser.</p></div><div class="card stack"><div class="persistGrid"><button class="secondary" id="exportAllBtn">Export All</button><label class="tertiary" for="importPack">Import Pack</label><input id="importPack" type="file" accept="application/json" style="display:none" /></div></div><div id="sessionsList" class="stack"></div></section>
@@ -741,6 +745,38 @@ $('offlineRetry').addEventListener('click',pingBackend); setInterval(pingBackend
 if(location.protocol==='https:') $('backendBase').value=`https://${location.hostname}:8443`;
 else if(location.protocol==='http:'&&!['localhost','127.0.0.1',''].includes(location.hostname)) $('backendBase').value=`http://${location.hostname}:8000`;
 syncSessions(); pingBackend();
+/* ---------- tools: show, hide, collapse and reorder the practice cards ---------- */
+const TOOLS=(()=>{
+  const defaults={order:[],hidden:[],collapsed:['trainer','metronome','notes']};
+  const cards=[...document.querySelectorAll('#practiceScreen [data-tool]')];
+  const info=cards.map(el=>({key:el.dataset.tool,title:el.dataset.title,core:!!el.dataset.core,el}));
+  defaults.order=info.map(t=>t.key);
+  const load=()=>{const v=LS.get('qt.layout',null); if(!v||!Array.isArray(v.order)) return JSON.parse(JSON.stringify(defaults)); const known=new Set(defaults.order); const order=v.order.filter(k=>known.has(k)); defaults.order.forEach(k=>{if(!order.includes(k)) order.push(k);}); return {order,hidden:(v.hidden||[]).filter(k=>known.has(k)),collapsed:(v.collapsed||[]).filter(k=>known.has(k))};};
+  let state=load();
+  info.forEach(t=>{t.el.classList.add('tool'); if(t.core) return;
+    let head=t.el.firstElementChild; if(!head||!head.classList.contains('row')){head=document.createElement('div'); head.className='row'; const st=document.createElement('strong'); st.textContent=t.title; head.appendChild(st); t.el.prepend(head);}
+    head.classList.add('toolHead'); head.addEventListener('click',e=>{if(e.target.closest('button,input,select,textarea,label,a')) return; toggle(t.key);});});
+  const save=()=>LS.set('qt.layout',state);
+  function apply(){
+    info.forEach(t=>{t.el.style.order=10+state.order.indexOf(t.key); t.el.classList.toggle('toolHidden',state.hidden.includes(t.key)); t.el.classList.toggle('collapsed',!t.core&&state.collapsed.includes(t.key));});
+    const shown=info.length-state.hidden.length; $('toolsSummary').textContent=shown===info.length?'All tools shown':`${shown} of ${info.length} tools shown`;
+    if(typeof resizeCanvas==='function') requestAnimationFrame(resizeCanvas);}
+  function toggle(key){const i=state.collapsed.indexOf(key); if(i>=0) state.collapsed.splice(i,1); else state.collapsed.push(key); save(); apply();}
+  function renderList(){
+    const host=$('toolsList'); host.innerHTML='';
+    state.order.forEach((key,i)=>{const t=info.find(x=>x.key===key); const row=document.createElement('div'); row.className='toolRow';
+      const lab=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!state.hidden.includes(key); cb.addEventListener('change',()=>{const j=state.hidden.indexOf(key); if(cb.checked&&j>=0) state.hidden.splice(j,1); if(!cb.checked&&j<0) state.hidden.push(key); save(); apply();}); lab.append(cb,document.createTextNode(t.title));
+      const up=document.createElement('button'); up.className='smallBtn'; up.textContent='▲'; up.setAttribute('aria-label',`Move ${t.title} up`); up.disabled=i===0; up.addEventListener('click',()=>move(i,-1));
+      const dn=document.createElement('button'); dn.className='smallBtn'; dn.textContent='▼'; dn.setAttribute('aria-label',`Move ${t.title} down`); dn.disabled=i===state.order.length-1; dn.addEventListener('click',()=>move(i,1));
+      row.append(lab,up,dn); host.appendChild(row);});}
+  function move(i,d){const j=i+d; if(j<0||j>=state.order.length) return; [state.order[i],state.order[j]]=[state.order[j],state.order[i]]; save(); apply(); renderList();}
+  $('toolsBtn').addEventListener('click',()=>{const p=$('toolsPanel'); const open=p.classList.toggle('hidden')===false; $('toolsBtn').textContent=open?'Done':'Customize'; if(open) renderList();});
+  $('toolsCollapse').addEventListener('click',()=>{state.collapsed=info.filter(t=>!t.core).map(t=>t.key); save(); apply();});
+  $('toolsExpand').addEventListener('click',()=>{state.collapsed=[]; save(); apply();});
+  $('toolsReset').addEventListener('click',()=>{state=JSON.parse(JSON.stringify(defaults)); save(); apply(); renderList();});
+  apply(); return {apply};
+})();
+
 renderPipeline(); renderStemList(); renderSessions(); resizeCanvas(); syncBackendSummary(); updateLoopUI(); setTarget('Guitar'); requestAnimationFrame(frame);
 </script>
 </body>

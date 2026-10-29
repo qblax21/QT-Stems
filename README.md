@@ -7,6 +7,7 @@ A self-hosted music practice app. Upload a song, split it into stems with [Demuc
 ## Features
 - **Split** any song into 4 stems (or 6 with guitar and piano), or just one part plus a backing track. Real progress bars for every step.
 - **Practice player:** instant mute/solo, drag-to-scrub, A/B loop with named sections, speed 50-150% and key shift of up to 6 semitones (both without changing the other), a speed trainer that climbs each loop, a metronome with tap tempo.
+- **Your own layout:** tap a tool's title to collapse or expand it, and use **Customize** on the Practice screen to tick which tools to show and move them up or down. Saved per device, so your phone and PC can differ.
 - **Library** on your PC shared by every device: search, rename, delete (one or many), storage used, and "Practice again" that restores your last loop, speed, mix and notes.
 - **Saved sessions** that live on the PC and sync between phone and computer.
 - **Key and chords:** the PC estimates the song's key and its chord progression from the stems. See the current and next chord while it plays, tap any chord to jump to it, switch to Roman numerals, and the chords follow your key shift.
