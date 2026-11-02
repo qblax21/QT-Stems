@@ -154,3 +154,12 @@ def test_beats_follow_a_sudden_tempo_change():
     result = chords.estimate_tempo(x)
     assert result["varies"]
     assert beat_hits(result["beats"], truth) > 0.85
+
+
+def test_smooth_beats_removes_wobble_but_keeps_a_tempo_ramp():
+    rng = np.random.default_rng(1)
+    steady = np.arange(40) * 20.0
+    wobbly = steady + rng.normal(0, 0.5, 40)
+    assert np.abs(chords.smooth_beats(wobbly) - steady).mean() < np.abs(wobbly - steady).mean()
+    ramp = np.cumsum(np.linspace(20, 14, 40))
+    assert np.abs(chords.smooth_beats(ramp) - ramp).max() < 0.2

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-VERSION = 3
+VERSION = 4
 TEMPO_HOP = 256
 TEMPO_NFFT = 1024
 SR = 11025
@@ -214,9 +214,30 @@ def track_beats(env: np.ndarray, period: np.ndarray, tightness: float = 60.0) ->
     return np.array(beats[::-1], dtype=float)
 
 
-def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
-    """Constant-tempo estimate: {'bpm', 'offset' (seconds of the first beat), 'confidence' 0..1}, or None."""
+def smooth_beats(frames: np.ndarray, half: int = 4, max_move: float = 0.6) -> np.ndarray:
+    """Pull each beat toward the straight line through its neighbours, so human timing wobble does not make the click
+    stutter, while a real tempo change (a ramp or a step) still passes because the fit is local. max_move is in frames."""
+    if len(frames) < 2 * half + 1:
+        return frames
+    out = frames.copy()
+    k = np.arange(len(frames))
+    for i in range(len(frames)):
+        lo, hi = max(0, i - half), min(len(frames), i + half + 1)
+        a, b = np.polyfit(k[lo:hi], frames[lo:hi], 1)
+        out[i] = frames[i] + np.clip(a * i + b - frames[i], -max_move, max_move)
+    return out
+
+
+def estimate_tempo(x: np.ndarray, sr: int = SR, y: np.ndarray | None = None) -> dict | None:
+    """Constant-tempo estimate: {'bpm', 'offset' (seconds of the first beat), 'confidence' 0..1}, or None.
+    x is the rhythm part (drums); y is the rest of the band, which adds the guitar and bass pulse when the drums
+    play half-time."""
     env = onset_envelope(x, sr)
+    if y is not None and len(y) >= sr * 6:
+        ey = onset_envelope(y, sr)
+        m = min(len(env), len(ey))
+        env = env[:m] + 0.6 * ey[:m]
+        env = env / max(float(env.max()), 1e-9)
     n = len(env)
     fps = sr / TEMPO_HOP
     if n < fps * 6 or env.max() <= 0:
@@ -229,6 +250,11 @@ def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
     prior = np.exp(-0.5 * (np.log2(bpms / 110.0) / 0.9) ** 2)
     score = np.interp(lags, np.arange(n), ac) * prior
     rough = float(bpms[int(score.argmax())])
+    # a slow pulse with real support at twice the rate is usually half-time drums under a faster song
+    if rough < 90:
+        dbl = float(np.interp(fps * 60.0 / (2 * rough), np.arange(n), ac))
+        if dbl >= 0.6 * float(np.interp(fps * 60.0 / rough, np.arange(n), ac)):
+            rough *= 2
     # refine: search +-3% for the beat grid that lines up best with the onsets
     smooth = np.convolve(env, np.array([0.25, 0.5, 0.25]), mode="same")
     best = (-1.0, rough, 0.0)
@@ -252,6 +278,7 @@ def estimate_tempo(x: np.ndarray, sr: int = SR) -> dict | None:
             denom = a - 2 * b + c
             frames = frames + np.clip(np.where(denom < -1e-9, 0.5 * (a - c) / np.where(denom < -1e-9, denom, -1.0), 0.0), -0.5, 0.5)
             frames = regularize_beats(frames, smooth, period)
+            frames = smooth_beats(frames)
             gaps = np.diff(frames) / fps
             local_bpm = 60.0 / np.convolve(gaps, np.ones(4) / 4, mode="valid")
             beat_env = float(smooth[frames.astype(int)].mean())
@@ -380,7 +407,7 @@ def analyze_signal(harm: np.ndarray, bass: np.ndarray | None = None, sr: int = S
         "tuning": round(tuning, 2),
         "duration": round(len(harm) / sr, 2),
         "chords": chords,
-        "tempo": estimate_tempo(drums if drums is not None and len(drums) >= sr * 6 else harm, sr),
+        "tempo": estimate_tempo(drums, sr, harm) if drums is not None and len(drums) >= sr * 6 else estimate_tempo(harm, sr),
     }
 
 
