@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-VERSION = 4
+VERSION = 5
 TEMPO_HOP = 256
 TEMPO_NFFT = 1024
 SR = 11025
@@ -165,7 +165,22 @@ def _local_periods(env: np.ndarray, fps: float, global_bpm: float, jump_cost: fl
     path[-1] = int(delta.argmax())
     for i in range(len(emit) - 1, 0, -1):
         path[i - 1] = back[i, path[i]]
-    return fps * 60.0 / np.interp(np.arange(n), centers, bpms[path])
+    chosen = bpms[path].copy()
+    # a short stretch far from the song's tempo, with the tempo back where it was on both sides, is a syncopated
+    # section that fooled the autocorrelation, not a tempo change: hold the song's tempo through it
+    far = np.abs(np.log2(chosen / global_bpm)) > 0.12
+    i = 0
+    while i < len(far):
+        if not far[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(far) and far[j]:
+            j += 1
+        if j - i <= 45 and i > 0 and j < len(far):
+            chosen[i:j] = global_bpm
+        i = j
+    return fps * 60.0 / np.interp(np.arange(n), centers, chosen)
 
 
 def regularize_beats(frames: np.ndarray, env: np.ndarray, period: np.ndarray) -> np.ndarray:
@@ -186,7 +201,7 @@ def regularize_beats(frames: np.ndarray, env: np.ndarray, period: np.ndarray) ->
     return np.array(out)
 
 
-def track_beats(env: np.ndarray, period: np.ndarray, tightness: float = 60.0) -> np.ndarray:
+def track_beats(env: np.ndarray, period: np.ndarray, tightness: float = 200.0) -> np.ndarray:
     """Dynamic-programming beat tracker (Ellis 2007): pick onsets that are strong and spaced like the local period."""
     n = len(env)
     e = env / (env.std() or 1.0)
