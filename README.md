@@ -42,7 +42,7 @@ Windows: double-click `start.bat`. Or in two terminals:
 python -m uvicorn app:app --host 0.0.0.0 --port 8000
 python web.py 5500
 ```
-Open `http://localhost:5500/practice-cover-app-v7.html`.
+Open `http://localhost:5500/qt-stems.html`.
 
 ### Passcode
 If `passcode.txt` exists (or the `QT_PASSCODE` environment variable is set), the backend refuses every request without it, and the app asks for it once per device. Delete the file to turn the lock off. Restart the backend after changing it.
@@ -61,14 +61,14 @@ A friend sees only their own Library, sessions and downloads, uploads to and spl
 
 ### From your phone
 1. Find your PC's IPv4 address (`ipconfig`), or its Tailscale address (starts with `100.`) when away from home.
-2. Open `http://<address>:5500/practice-cover-app-v7.html`. The backend address fills in automatically.
+2. Open `http://<address>:5500/qt-stems.html`. The backend address fills in automatically.
 3. Share, then **Add to Home Screen** to install it. If it can't connect, allow Python through Windows Firewall for private networks only.
 
 ### HTTPS over Tailscale (recommended)
 Plain `http` hides some browser features. Over HTTPS the phone gets the proper audio engine and a true full-screen app.
 1. In the Tailscale admin console, turn on **MagicDNS** and **HTTPS Certificates**.
 2. Run `powershell -ExecutionPolicy Bypass -File .\tailscale-https.ps1` on the PC (add `-Off` to undo). It publishes the page on port 443 and the backend on 8443, private to your tailnet.
-3. Open the `https://<pc-name>.<tailnet>.ts.net/practice-cover-app-v7.html` address it prints, then add it to the home screen again.
+3. Open the `https://<pc-name>.<tailnet>.ts.net/qt-stems.html` address it prints, then add it to the home screen again.
 
 ### Start automatically at login (Windows)
 `run-servers.ps1` keeps both servers running and restarts them if they stop. Register it once in PowerShell:

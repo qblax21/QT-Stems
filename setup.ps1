@@ -33,4 +33,4 @@ if (-not (Test-Path passcode.txt)) {
     Write-Host "Created passcode.txt (the app asks for it): $($groups -join '-')"
 }
 Write-Host ''
-Write-Host 'Done. Start the servers with start.bat, then open http://localhost:5500/practice-cover-app-v7.html'
+Write-Host 'Done. Start the servers with start.bat, then open http://localhost:5500/qt-stems.html'

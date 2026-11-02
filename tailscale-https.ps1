@@ -25,5 +25,5 @@ if ($Off) {
 
 $self = (& $ts status --json | ConvertFrom-Json).Self.DNSName.TrimEnd('.')
 Write-Host ''
-Write-Host "Open on your phone (Tailscale on):  https://$self/practice-cover-app-v7.html"
+Write-Host "Open on your phone (Tailscale on):  https://$self/qt-stems.html"
 Write-Host 'Then use Share > Add to Home Screen again to replace the old shortcut.'

@@ -2,7 +2,7 @@
   "name": "QT Stems",
   "short_name": "QT Stems",
   "description": "Split songs into stems, mute your part and practice.",
-  "start_url": "practice-cover-app-v7.html",
+  "start_url": "qt-stems.html",
   "scope": ".",
   "display": "standalone",
   "background_color": "#120e1a",

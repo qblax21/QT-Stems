@@ -9,7 +9,7 @@ if "%QT_PYTHON%"=="" set QT_PYTHON=python
 start "Quick Tune backend (8000)" "%QT_PYTHON%" -m uvicorn app:app --host 0.0.0.0 --port 8000
 start "Quick Tune web (5500)" "%QT_PYTHON%" web.py 5500
 echo.
-echo Open on this PC:   http://localhost:5500/practice-cover-app-v7.html
+echo Open on this PC:   http://localhost:5500/qt-stems.html
 echo Your LAN address (use on phone, same Wi-Fi):
 ipconfig | findstr /R /C:"IPv4"
 echo Tailscale address starts with 100. - use that when away from home.

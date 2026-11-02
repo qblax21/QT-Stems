@@ -33,7 +33,7 @@ def status(url):
         return e.code
 
 
-@pytest.mark.parametrize("path", ["/practice-cover-app-v7.html", "/logo.svg", "/manifest.webmanifest", "/icons/icon-192.png"])
+@pytest.mark.parametrize("path", ["/qt-stems.html", "/logo.svg", "/manifest.webmanifest", "/icons/icon-192.png"])
 def test_app_files_are_served(base, path):
     assert status(base + path) == 200
 
@@ -48,3 +48,7 @@ def test_everything_else_is_hidden(base, path):
 
 def test_root_redirects_to_the_page(base):
     assert status(base + "/") == 302
+
+
+def test_the_old_page_name_redirects_to_the_new_one(base):
+    assert status(base + "/practice-cover-app-v7.html") == 302

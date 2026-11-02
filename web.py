@@ -10,7 +10,8 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent
-PAGE = "/practice-cover-app-v7.html"
+PAGE = "/qt-stems.html"
+OLD_PAGE = "/practice-cover-app-v7.html"  # the old name: bookmarks and home-screen icons made before the rename still land here
 ALLOWED = {PAGE, "/logo.svg", "/manifest.webmanifest"}
 
 
@@ -25,7 +26,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _gate(self) -> bool:
         raw = self.path.split("?", 1)[0]
-        if raw in ("", "/"):
+        if raw in ("", "/", OLD_PAGE):
             self.send_response(302)
             self.send_header("Location", PAGE)
             self.end_headers()
