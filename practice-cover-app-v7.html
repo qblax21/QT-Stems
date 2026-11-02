@@ -126,7 +126,7 @@
     <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
     <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
     <div class="row"><span class="subtle" id="songTempo">Song tempo: not analyzed yet</span><button class="smallBtn" id="useTempoBtn" disabled>Use it</button></div>
-    <div class="row"><span>Click style</span><select id="clickStyle"><option value="follow">Follows tempo changes</option><option value="steady">Steady grid</option></select></div>
+    <div class="row"><span>Click style</span><select id="clickStyle"><option value="follow">Follows tempo changes</option><option value="steady">Steady grid</option></select></div><div class="row"><span>Click rate</span><select id="clickRate"><option value="1">Every beat</option><option value="0.5">Half (every other beat)</option><option value="2">Double (twice per beat)</option></select></div><div class="row"><span>Click timing <b id="clickShiftVal">0 ms</b></span><input type="range" id="clickShift" min="-200" max="200" step="5" value="0" style="max-width:55%"></div><div class="subtle">If the click feels early or late, slide it until it sits on the beat. The song tempo above may be double or half of how you count it: use Click rate.</div>
     <div class="row"><span>Click follows the song</span><button class="toggle" id="syncToggle" aria-label="Play the click on the song's beats"><span></span></button></div>
     <div class="row"><span>Count-in before play</span><select id="countIn"><option value="0">Off</option><option value="1">1 bar</option><option value="2">2 bars</option></select></div>
   </div>
@@ -571,19 +571,34 @@ $('trainerToggle').addEventListener('click',()=>{trainer.on=!trainer.on; setTogg
 const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[],sync:false,lastBeat:-1e9,lastSp:0};
 function setBpm(v){metro.bpm=Math.max(30,Math.min(300,Math.round(v))); $('bpmValue').textContent=`${metro.bpm} BPM`;}
 function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08); return o;}
+function clickPrefs(){let r='1',sh=0; try{r=localStorage.getItem('qt.clickRate')||'1'; sh=Number(localStorage.getItem('qt.clickShift'))||0;}catch{} return {rate:Number(r)||1,shift:sh/1000};}
+{const cr=$('clickRate'), cs=$('clickShift'), pr=clickPrefs(); cr.value=String(pr.rate); cs.value=String(Math.round(pr.shift*1000)); $('clickShiftVal').textContent=`${cs.value} ms`;
+ cr.addEventListener('change',()=>{try{localStorage.setItem('qt.clickRate',cr.value);}catch{} metro.lastBeat=-1e9;});
+ cs.addEventListener('input',()=>{$('clickShiftVal').textContent=`${cs.value} ms`; try{localStorage.setItem('qt.clickShift',cs.value);}catch{}});}
+const clickCache={src:null,rate:0,t:[],a:[]};
+function clickBeats(T,rate){ // beat times plus whether each is a bar start, thinned or doubled to the chosen rate
+  if(clickCache.src===T.beats&&clickCache.rate===rate) return clickCache;
+  const b=T.beats, down=T.down||0, t=[], a=[];
+  for(let i=0;i<b.length;i++){
+    if(rate===0.5){if(((i-down)%2+2)%2===0){t.push(b[i]); a.push(((i-down)%4+4)%4===0);}}
+    else{t.push(b[i]); a.push(rate===2?(((i-down)%4+4)%4===0):(((i-down)%4+4)%4===0));
+      if(rate===2&&i+1<b.length){t.push((b[i]+b[i+1])/2); a.push(false);}}}
+  Object.assign(clickCache,{src:b,rate,t,a}); return clickCache;}
+function outLatency(ac){return ac?(ac.outputLatency||0)+(ac.baseLatency||0):0;}
 function metroTick(){
   const T=harmony.data&&harmony.data.tempo;
   if(metro.sync&&T){ // click on the song's own beats; they stretch with the speed
     if(!isPlaying()) return;
-    const now=metro.ac.currentTime, sp=curTime(), horizon=.12*speed, down=T.down||0;
+    const pr=clickPrefs(), lat=outLatency(engine.ac)-outLatency(metro.ac), now=metro.ac.currentTime+pr.shift+Math.max(-.15,Math.min(.15,lat)), sp=curTime(), horizon=.12*speed, down=T.down||0;
     if(sp<metro.lastSp-.05) metro.lastBeat=-1e9; metro.lastSp=sp;
-    const beats=T.beats&&$('clickStyle').value==='follow'?T.beats:null;
+    const beats=T.beats&&T.beats.length&&$('clickStyle').value==='follow'?T.beats:null;
     if(beats){ // every beat the tracker found, so the click keeps up when the tempo moves
-      let lo=0,hi=beats.length; while(lo<hi){const m=(lo+hi)>>1; if(beats[m]<sp-.001) lo=m+1; else hi=m;}
-      for(let i=lo;i<beats.length&&beats[i]<=sp+horizon;i++){if(i<=metro.lastBeat) continue; metro.lastBeat=i; metroClick(now+Math.max(0,(beats[i]-sp)/speed),(((i-down)%4)+4)%4===0);}
+      const cb=clickBeats(T,pr.rate), bt=cb.t;
+      let lo=0,hi=bt.length; while(lo<hi){const m=(lo+hi)>>1; if(bt[m]<sp-.001) lo=m+1; else hi=m;}
+      for(let i=lo;i<bt.length&&bt[i]<=sp+horizon;i++){if(i<=metro.lastBeat) continue; metro.lastBeat=i; metroClick(Math.max(metro.ac.currentTime,now+(bt[i]-sp)/speed),cb.a[i]);}
       return;}
-    const spb=60/T.bpm;
-    for(let n=Math.ceil((sp-T.offset)/spb-1e-6);;n++){const bt=T.offset+n*spb; if(bt>sp+horizon) break; if(n<=metro.lastBeat) continue; metro.lastBeat=n; metroClick(now+Math.max(0,(bt-sp)/speed),(((n-down)%4)+4)%4===0);}
+    const spb=60/T.bpm/pr.rate;
+    for(let n=Math.ceil((sp-T.offset)/spb-1e-6);;n++){const bt=T.offset+n*spb; if(bt>sp+horizon) break; if(n<=metro.lastBeat) continue; metro.lastBeat=n; metroClick(Math.max(metro.ac.currentTime,now+(bt-sp)/speed),(((n-down*pr.rate)%(4*pr.rate))+4*pr.rate)%(4*pr.rate)===0);}
     return;}
   while(metro.next<metro.ac.currentTime+.12){metroClick(metro.next,metro.beat%4===0); metro.next+=60/metro.bpm; metro.beat++;}}
 function metroToggle(){
