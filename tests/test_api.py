@@ -21,7 +21,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(backend, "SESSIONS_FILE", tmp_path / "sessions.json")
     monkeypatch.setattr(backend, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(backend, "PASSCODE", "")
+    monkeypatch.setattr(backend, "USERS_FILE", tmp_path / "users.json")
     monkeypatch.setattr(backend, "MAX_UPLOAD_MB", 500)
+    backend.LOGIN_FAILS.clear()
+    backend.JOBS.clear()
     return TestClient(backend.app)
 
 

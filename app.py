@@ -20,6 +20,7 @@ from starlette.background import BackgroundTask
 import backup
 import chords
 import fidelity
+import users
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quick Tune Demucs Backend")
@@ -39,21 +40,67 @@ def _load_passcode() -> str:
 
 PASSCODE = _load_passcode()
 MAX_UPLOAD_MB = int(os.environ.get("QT_MAX_UPLOAD_MB", "500"))
+OWNER = {"id": users.OWNER_ID, "name": "Owner", "admin": True}
+ADMIN_PATHS = ("/api/backup", "/api/restore", "/api/last-error")  # the owner's own housekeeping, never for friends
+MAX_FAILS, FAIL_WINDOW = 10, 600  # wrong passcodes allowed per address, per ten minutes
+LOGIN_FAILS = {}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")  # the last entry is the one a trusted proxy (Tailscale) added
+    return fwd.split(",")[-1].strip() or (request.client.host if request.client else "?")
+
+
+def identify(key: str):
+    """The person this passcode belongs to, or None. With no passcodes configured at all the server is open (the owner)."""
+    friends = users.load(USERS_FILE)
+    if not PASSCODE and not friends:
+        return OWNER
+    found = None
+    for secret, person in ([(PASSCODE, OWNER)] if PASSCODE else []) + [(f["key"], f) for f in friends]:
+        if hmac.compare_digest(key.encode(), secret.encode()):  # compare against everyone so timing reveals nothing
+            found = person
+    return found
+
+
+def _user(request: Request) -> dict:
+    return getattr(request.state, "user", OWNER)
 
 
 # Registered before CORS so CORS ends up outermost and 401 responses still reach the browser.
 @app.middleware("http")
 async def require_passcode(request: Request, call_next):
-    if PASSCODE and request.method != "OPTIONS" and request.url.path != "/api/health":
-        if not hmac.compare_digest(request.headers.get("x-qt-key", "").encode(), PASSCODE.encode()):
+    path = request.url.path
+    if request.method != "OPTIONS" and path != "/api/health":
+        key = request.headers.get("x-qt-key", "")
+        ip, now = _client_ip(request), time.time()
+        recent = [t for t in LOGIN_FAILS.get(ip, []) if now - t < FAIL_WINDOW]
+        if len(recent) >= MAX_FAILS:
+            return JSONResponse({"detail": "Too many wrong passcodes. Try again in a few minutes."}, status_code=429)
+        user = identify(key)
+        if user is None:
+            if key:  # a request with no passcode at all is just the app asking; only real guesses count
+                recent.append(now)
+                LOGIN_FAILS[ip] = recent
+                if len(LOGIN_FAILS) > 2000:
+                    LOGIN_FAILS.clear()
             await asyncio.sleep(0.5)  # slow down guessing
             return JSONResponse({"detail": "Passcode required"}, status_code=401)
+        request.state.user = user
+        if not user["admin"] and path.startswith(ADMIN_PATHS):
+            return JSONResponse({"detail": "Only the owner can do that."}, status_code=403)
+        parts = path.split("/")
+        if len(parts) > 2 and parts[1] == "stems" and JOB_ID_RE.match(parts[2]) and users.song_owner(STEMS_DIR / parts[2]) != user["id"]:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+    else:
+        user = OWNER
+    limit_mb = MAX_UPLOAD_MB if user["admin"] else min(MAX_UPLOAD_MB, user["max_upload_mb"])
     try:
-        too_big = int(request.headers.get("content-length", "0")) > MAX_UPLOAD_MB * 1024 * 1024
+        too_big = int(request.headers.get("content-length", "0")) > limit_mb * 1024 * 1024
     except ValueError:
         too_big = False
     if too_big:
-        return JSONResponse({"detail": f"File is larger than {MAX_UPLOAD_MB} MB."}, status_code=413)
+        return JSONResponse({"detail": f"File is larger than {limit_mb} MB."}, status_code=413)
     return await call_next(request)
 
 
@@ -73,6 +120,7 @@ ERROR_LOG = BASE_DIR / "last_error.txt"
 LIBRARY_DIR = BASE_DIR / "library"  # original uploads, kept so every song sent from any device lives on this PC
 LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
 SESSIONS_FILE = BASE_DIR / "sessions.json"
+USERS_FILE = BASE_DIR / "users.json"  # friends and their passcodes; managed with users.py
 BACKUP_DIR = BASE_DIR / "backups"
 SESSIONS_LOCK = threading.Lock()
 JOB_ID_RE = re.compile(r"^[0-9a-f]{10}$")
@@ -201,7 +249,7 @@ def collect_stem_files(source_path: Path, output_root: Path, model: str):
     return files
 
 
-def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str, stem: str = "", title: str = ""):
+def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: str, stem: str = "", title: str = "", owner: str = users.OWNER_ID):
     job = JOBS[job_id]
     try:
         with RUN_LOCK:  # one separation at a time; others stay "queued"
@@ -215,6 +263,13 @@ def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: 
 
             public_dir = STEMS_DIR / job_id
             public_dir.mkdir(parents=True, exist_ok=True)
+            try:  # first, so the song is theirs from the moment its files exist
+                (public_dir / "meta.json").write_text(json.dumps({
+                    "title": title or source_path.stem, "model": model, "device": device, "stem": stem,
+                    "created": time.time(), "original": source_path.name, "owner": owner,
+                }), encoding="utf-8")
+            except Exception:
+                log_error(traceback.format_exc())
 
             outputs = {}
             for stem_file in stem_files:
@@ -227,10 +282,6 @@ def run_job(job_id: str, source_path: Path, work_dir: Path, model: str, device: 
 
             try:  # library bookkeeping must never fail a finished separation
                 shutil.copy2(source_path, LIBRARY_DIR / f"{job_id}{source_path.suffix.lower()}")
-                (public_dir / "meta.json").write_text(json.dumps({
-                    "title": title or source_path.stem, "model": model, "device": device, "stem": stem,
-                    "created": time.time(), "original": source_path.name,
-                }), encoding="utf-8")
             except Exception:
                 log_error(traceback.format_exc())
 
@@ -280,21 +331,29 @@ def _detail_quietly(song_id: str):
         log_error(traceback.format_exc())
 
 
-@app.post("/api/detail/{song_id}")
-def make_detail(song_id: str):
-    if not JOB_ID_RE.match(song_id) or not (STEMS_DIR / song_id).is_dir():
+def own_song(request: Request, song_id: str) -> Path:
+    """The folder of one of this person's songs; anyone else's song looks exactly like a song that doesn't exist."""
+    d = STEMS_DIR / song_id
+    if not JOB_ID_RE.match(song_id) or not d.is_dir() or users.song_owner(d) != _user(request)["id"]:
         raise HTTPException(status_code=404, detail="Unknown song")
+    return d
+
+
+@app.post("/api/detail/{song_id}")
+def make_detail(request: Request, song_id: str):
+    own_song(request, song_id)
     return ensure_detail(song_id)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted", "auth": bool(PASSCODE)}
+    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted", "auth": bool(PASSCODE or users.load(USERS_FILE))}
 
 
 @app.get("/api/auth-check")
-def auth_check():
-    return {"ok": True}  # reaching this means the passcode (if any) was accepted
+def auth_check(request: Request):
+    u = _user(request)  # reaching this means the passcode (if any) was accepted
+    return {"ok": True, "user": {"id": u["id"], "name": u["name"], "admin": u["admin"]}}
 
 
 @app.get("/api/last-error")
@@ -304,8 +363,22 @@ def last_error():
     return {"error": "No logged error yet."}
 
 
+MAX_QUEUED_PER_FRIEND = 2
+
+
+def check_friend_limits(user: dict):
+    """Friends share this PC's graphics card and disk, so each gets a small queue and a storage allowance."""
+    busy = sum(1 for j in JOBS.values() if j.get("_owner") == user["id"] and j["status"] in ("queued", "running"))
+    if busy >= MAX_QUEUED_PER_FRIEND:
+        raise HTTPException(status_code=429, detail="You already have songs waiting to be split. Wait for one to finish.")
+    _, used = users.usage(STEMS_DIR, LIBRARY_DIR, user["id"])
+    if used >= user["quota_mb"] * 1_000_000:
+        raise HTTPException(status_code=403, detail="Your storage on this PC is full. Delete some songs from your Library first.")
+
+
 @app.post("/api/demucs/separate")
 def separate(
+    request: Request,
     file: UploadFile = File(...),
     model: str = Form("htdemucs"),
     device: str = Form("cpu"),
@@ -322,13 +395,26 @@ def separate(
     if stem in SIX_STEM_ONLY and model != "htdemucs_6s":
         raise HTTPException(status_code=400, detail=f"'{stem}' needs the 6-stem model (htdemucs_6s).")
 
+    user = _user(request)
+    if not user["admin"]:
+        check_friend_limits(user)
+    limit_mb = MAX_UPLOAD_MB if user["admin"] else min(MAX_UPLOAD_MB, user["max_upload_mb"])
+
     job_id = uuid4().hex[:10]
     work_dir = Path(tempfile.mkdtemp(prefix="quicktune_"))
     source_path = work_dir / Path(file.filename or "upload.wav").name
 
     try:
-        with source_path.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+        written = 0
+        with source_path.open("wb") as f:  # also enforced while copying, for uploads that don't announce their size
+            while chunk := file.file.read(1 << 20):
+                written += len(chunk)
+                if written > limit_mb * 1024 * 1024:
+                    raise HTTPException(status_code=413, detail=f"File is larger than {limit_mb} MB.")
+                f.write(chunk)
+    except HTTPException:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
     except Exception as e:
         shutil.rmtree(work_dir, ignore_errors=True)
         log_error(f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
@@ -346,27 +432,31 @@ def separate(
         "error": None,
         "_total": 0,
         "_done": 0,
+        "_owner": user["id"],
     }
     threading.Thread(
-        target=run_job, args=(job_id, source_path, work_dir, model, device, stem, title.strip()[:200]), daemon=True
+        target=run_job, args=(job_id, source_path, work_dir, model, device, stem, title.strip()[:200], user["id"]), daemon=True
     ).start()
     return {"status": "queued", "job_id": job_id, "model": model, "device": device}
 
 
 @app.get("/api/jobs/{job_id}")
-def job_status(job_id: str):
+def job_status(request: Request, job_id: str):
     job = JOBS.get(job_id)
+    if job and job.get("_owner") != _user(request)["id"]:
+        job = None
     if not job:
         raise HTTPException(status_code=404, detail="Unknown job (the server may have restarted).")
     return {k: v for k, v in job.items() if not k.startswith("_")}
 
 
 @app.get("/api/library")
-def library():
-    """Every song that has been split on this PC (from any device), newest first."""
+def library(request: Request):
+    """Every song this person has split on this PC (from any of their devices), newest first."""
+    user = _user(request)
     items = []
     for d in STEMS_DIR.iterdir():
-        if not d.is_dir() or not JOB_ID_RE.match(d.name):
+        if not d.is_dir() or not JOB_ID_RE.match(d.name) or users.song_owner(d) != user["id"]:
             continue
         meta = {}
         try:
@@ -393,21 +483,21 @@ def library():
             "hasOriginal": any(LIBRARY_DIR.glob(d.name + ".*")),
         })
     items.sort(key=lambda i: i["created"], reverse=True)
-    return {
-        "songs": items,
-        "total_bytes": sum(i["bytes"] for i in items),
-        "disk_free_bytes": shutil.disk_usage(BASE_DIR).free,
-    }
+    total = sum(i["bytes"] for i in items)
+    free = shutil.disk_usage(BASE_DIR).free
+    if not user["admin"]:
+        free = min(free, max(0, user["quota_mb"] * 1_000_000 - total))  # what a friend sees as "space left" is their allowance
+    return {"songs": items, "total_bytes": total, "disk_free_bytes": free}
 
 
 @app.post("/api/library/delete")
-def delete_songs(payload: dict):
+def delete_songs(request: Request, payload: dict):
     ids = payload.get("ids")
     if not isinstance(ids, list) or len(ids) > 500:
         raise HTTPException(status_code=400, detail="Expected a list of ids")
     deleted = []
     for song_id in ids:
-        if isinstance(song_id, str) and JOB_ID_RE.match(song_id):
+        if isinstance(song_id, str) and JOB_ID_RE.match(song_id) and users.song_owner(STEMS_DIR / song_id) == _user(request)["id"]:
             shutil.rmtree(STEMS_DIR / song_id, ignore_errors=True)
             for f in LIBRARY_DIR.glob(song_id + ".*"):
                 f.unlink(missing_ok=True)
@@ -417,9 +507,8 @@ def delete_songs(payload: dict):
 
 
 @app.patch("/api/library/{song_id}")
-def rename_song(song_id: str, payload: dict):
-    if not JOB_ID_RE.match(song_id) or not (STEMS_DIR / song_id).is_dir():
-        raise HTTPException(status_code=404, detail="Unknown song")
+def rename_song(request: Request, song_id: str, payload: dict):
+    own_song(request, song_id)
     title = str(payload.get("title", "")).strip()[:200]
     if not title:
         raise HTTPException(status_code=400, detail="Title is empty")
@@ -434,9 +523,11 @@ def rename_song(song_id: str, payload: dict):
 
 
 @app.delete("/api/library/{song_id}")
-def delete_song(song_id: str):
+def delete_song(request: Request, song_id: str):
     if not JOB_ID_RE.match(song_id):
         raise HTTPException(status_code=400, detail="Bad id")
+    if (STEMS_DIR / song_id).is_dir() and users.song_owner(STEMS_DIR / song_id) != _user(request)["id"]:
+        raise HTTPException(status_code=404, detail="Unknown song")
     shutil.rmtree(STEMS_DIR / song_id, ignore_errors=True)
     for f in LIBRARY_DIR.glob(song_id + ".*"):
         f.unlink(missing_ok=True)
@@ -448,11 +539,9 @@ ANALYSIS_LOCK = threading.Lock()
 
 
 @app.get("/api/analysis/{song_id}")
-def analysis(song_id: str, refresh: int = 0):
+def analysis(request: Request, song_id: str, refresh: int = 0):
     """Key and chord progression for a song, estimated from its stems and cached next to them."""
-    song_dir = STEMS_DIR / song_id
-    if not JOB_ID_RE.match(song_id) or not song_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Unknown song")
+    song_dir = own_song(request, song_id)
     cache = song_dir / "chords.json"
     with ANALYSIS_LOCK:  # one analysis at a time keeps the PC responsive while Demucs may be running
         if not refresh:
@@ -485,12 +574,10 @@ def _tempo_chain(t: float):
 
 
 @app.post("/api/export")
-def export_mix(payload: dict):
+def export_mix(request: Request, payload: dict):
     """Render the current mix (per-stem gains, speed, key) to an MP3 so it can be saved or shared."""
     song_id = str(payload.get("song_id", ""))
-    song_dir = STEMS_DIR / song_id
-    if not JOB_ID_RE.match(song_id) or not song_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Unknown song")
+    song_dir = own_song(request, song_id)
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise HTTPException(status_code=500, detail="ffmpeg is not installed on the PC.")
@@ -540,18 +627,23 @@ def export_mix(payload: dict):
     return FileResponse(out, media_type="audio/mpeg", filename=f"{safe} (QT mix).mp3", background=BackgroundTask(out.unlink, missing_ok=True))
 
 
+def sessions_file(request: Request) -> Path:
+    uid = _user(request)["id"]
+    return SESSIONS_FILE if uid == users.OWNER_ID else SESSIONS_FILE.with_name(f"sessions-{uid}.json")
+
+
 @app.get("/api/sessions")
-def get_sessions():
+def get_sessions(request: Request):
     with SESSIONS_LOCK:
         try:
-            data = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+            data = json.loads(sessions_file(request).read_text(encoding="utf-8"))
             return {"sessions": data.get("sessions", []), "deleted": data.get("deleted", [])}
         except Exception:
             return {"sessions": [], "deleted": []}
 
 
 @app.put("/api/sessions")
-def put_sessions(payload: dict):
+def put_sessions(request: Request, payload: dict):
     sessions = payload.get("sessions")
     if not isinstance(sessions, list) or len(sessions) > 500:
         raise HTTPException(status_code=400, detail="Expected a list of sessions")
@@ -562,7 +654,7 @@ def put_sessions(payload: dict):
     if len(text) > 5_000_000:
         raise HTTPException(status_code=413, detail="Too large")
     with SESSIONS_LOCK:
-        SESSIONS_FILE.write_text(text, encoding="utf-8")
+        sessions_file(request).write_text(text, encoding="utf-8")
     return {"saved": len(sessions)}
 
 

@@ -47,6 +47,18 @@ Open `http://localhost:5500/practice-cover-app-v7.html`.
 ### Passcode
 If `passcode.txt` exists (or the `QT_PASSCODE` environment variable is set), the backend refuses every request without it, and the app asks for it once per device. Delete the file to turn the lock off. Restart the backend after changing it.
 
+### Friends (separate profiles)
+Your passcode is the owner's. Everyone else gets their own, managed with `users.py` (changes apply immediately, no restart):
+
+```
+python users.py add "Alex"       # prints the passcode to send them
+python users.py list             # who is here, how much space they use
+python users.py reset alex       # new passcode; the old one stops working
+python users.py remove alex      # cut them off (--delete-songs also deletes their songs)
+```
+
+A friend sees only their own Library, sessions and downloads, uploads to and splits on this PC (one at a time, two queued at most), and cannot open anyone else's songs or the owner's backup and error pages. Defaults: 5 GB of songs and 200 MB per upload per friend (`--quota-gb`, `--upload-mb`). Songs made before accounts existed belong to the owner. Wrong passcodes lock an address out for ten minutes after ten tries. Friend passcodes live in `users.json` (not committed).
+
 ### From your phone
 1. Find your PC's IPv4 address (`ipconfig`), or its Tailscale address (starts with `100.`) when away from home.
 2. Open `http://<address>:5500/practice-cover-app-v7.html`. The backend address fills in automatically.
@@ -91,7 +103,7 @@ pytest -q tests
 The tests cover the passcode, upload limit, request validation, library, sessions and export; they never run Demucs. To run them on GitHub for every push, copy `ci/tests.yml` to `.github/workflows/tests.yml` (pushing a workflow file needs a token with the `workflow` scope, e.g. `gh auth refresh -s workflow`).
 
 ## Security note
-This is a LAN/Tailscale tool. The optional passcode is a shared secret sent over your private network; over plain `http` anyone who can sniff that network could read it, so prefer the HTTPS setup when away from home. The page server (`web.py`) only serves the app files, never `passcode.txt`, `stems/` or `library/`, but do not expose ports 5500 or 8000 to the public internet. Uploads are capped at 500 MB (`QT_MAX_UPLOAD_MB`).
+This is a LAN/Tailscale tool. The optional passcode is a shared secret sent over your private network; over plain `http` anyone who can sniff that network could read it, so prefer the HTTPS setup when away from home. The page server (`web.py`) only serves the app files, never `passcode.txt`, `stems/` or `library/`, but do not expose ports 5500 or 8000 to the public internet. Uploads are capped at 500 MB (`QT_MAX_UPLOAD_MB`). If a friend outside your tailnet needs access, use a proper public HTTPS address (for example Tailscale Funnel) only together with a strong owner passcode and per-friend passcodes (above).
 
 ## Troubleshooting
 - Failures are written to `last_error.txt` and shown at `/api/last-error`. `run-servers.log`, `backend_log.txt` and `web_log.txt` record the servers.

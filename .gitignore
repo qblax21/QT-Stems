@@ -13,3 +13,5 @@ library/
 sessions.json
 passcode.txt
 backups/
+users.json
+sessions-*.json
