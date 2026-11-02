@@ -129,7 +129,7 @@
     <div class="speedRow"><button class="secondary" id="bpmDown">− 1</button><strong id="bpmValue">100 BPM</strong><button class="secondary" id="bpmUp">+ 1</button></div>
     <div class="grid2"><button class="secondary" id="tapBtn">Tap tempo</button><button class="primary" id="metroBtn">Start click</button></div>
     <div class="row"><span class="subtle" id="songTempo">Song tempo: not analyzed yet</span><button class="smallBtn" id="useTempoBtn" disabled>Use it</button></div>
-    <div class="row"><span>Click style</span><select id="clickStyle"><option value="follow">Follows tempo</option><option value="steady">Steady grid</option></select></div><div class="row"><span>Click rate</span><select id="clickRate"><option value="1">Every beat</option><option value="0.5">Half speed</option><option value="2">Double speed</option></select></div><div class="row"><span>Click timing <b id="clickShiftVal">0 ms</b></span><input type="range" id="clickShift" min="-200" max="200" step="5" value="0" style="max-width:55%"></div><div class="row"><span style="white-space:nowrap">Bar start: <b id="downVal">auto</b></span><span style="display:flex;gap:.4rem;white-space:nowrap"><button class="secondary" id="setDownBtn" style="min-height:40px;padding:.4rem .7rem;font-size:.85rem">Beat 1 here</button><button class="secondary" id="clearDownBtn" style="min-height:40px;padding:.4rem .7rem;font-size:.85rem">Auto</button></span></div><div class="subtle">If the click feels early or late, slide it until it sits on the beat. The song tempo above may be double or half of how you count it: use Click rate.</div>
+    <div class="row"><span>Click style</span><select id="clickStyle"><option value="follow">Follows tempo</option><option value="steady">Steady grid</option></select></div><div class="row"><span>Click rate</span><select id="clickRate"><option value="1">Every beat</option><option value="0.5">Half speed</option><option value="2">Double speed</option></select></div><div class="row"><span>Click timing <b id="clickShiftVal">0 ms</b></span><input type="range" id="clickShift" min="-200" max="200" step="5" value="0" style="max-width:55%"></div><div class="subtle">If the click feels early or late, slide it until it sits on the beat. The song tempo above may be double or half of how you count it: use Click rate.</div>
     <div class="row"><span>Click follows the song</span><button class="toggle" id="syncToggle" aria-label="Play the click on the song's beats"><span></span></button></div>
     <div class="row"><span>Count-in before play</span><select id="countIn"><option value="0">Off</option><option value="1">1 bar</option><option value="2">2 bars</option></select></div>
   </div>
@@ -573,17 +573,13 @@ $('trainerToggle').addEventListener('click',()=>{trainer.on=!trainer.on; setTogg
 ['trStep','trEvery','trMax'].forEach(id=>$(id).addEventListener('change',trainerNote));
 const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[],sync:false,lastBeat:-1e9,lastSp:0};
 function setBpm(v){metro.bpm=Math.max(30,Math.min(300,Math.round(v))); $('bpmValue').textContent=`${metro.bpm} BPM`;}
-function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08); return o;}
+function metroClick(t){const accent=false, ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08); return o;}
 function clickPrefs(){let r='1',sh=110; // 110 ms suits most phones until you move the slider
    try{r=localStorage.getItem('qt.clickRate')||'1'; const v=localStorage.getItem('qt.clickShift'); sh=v===null?110:Number(v)||0;}catch{sh=110;} return {rate:Number(r)||1,shift:sh/1000};}
 {const cr=$('clickRate'), cs=$('clickShift'), pr=clickPrefs(); cr.value=String(pr.rate); cs.value=String(Math.round(pr.shift*1000)); $('clickShiftVal').textContent=`${cs.value} ms`;
  cr.addEventListener('change',()=>{try{localStorage.setItem('qt.clickRate',cr.value);}catch{} metro.lastBeat=-1e9;});
  cs.addEventListener('input',()=>{$('clickShiftVal').textContent=`${cs.value} ms`; try{localStorage.setItem('qt.clickShift',cs.value);}catch{}});}
-function downKey(){return 'qt.down.'+(harmony.id||'');}
-function downFor(T){let v=null; try{v=localStorage.getItem(downKey());}catch{} return v===null||v===''||isNaN(Number(v))?(T.down||0):Number(v);}
-function renderDown(){const T=harmony.data&&harmony.data.tempo; let v=null; try{v=localStorage.getItem(downKey());}catch{} $('downVal').textContent=v===null||v===''?'auto':'set by you'; $('setDownBtn').disabled=!(T&&T.beats);}
-$('setDownBtn').addEventListener('click',()=>{const T=harmony.data&&harmony.data.tempo; if(!T||!T.beats) return; const sp=curTime(), b=T.beats; let best=0; for(let i=1;i<b.length;i++) if(Math.abs(b[i]-sp)<Math.abs(b[best]-sp)) best=i; try{localStorage.setItem(downKey(),String(best%4));}catch{} clickCache.src=null; metro.lastBeat=-1e9; renderDown();});
-$('clearDownBtn').addEventListener('click',()=>{try{localStorage.removeItem(downKey());}catch{} clickCache.src=null; metro.lastBeat=-1e9; renderDown();});
+const downFor=()=>0; // every click sounds the same: songs are not always in 4/4
 const clickCache={src:null,rate:0,down:-1,t:[],a:[]};
 function clickBeats(T,rate){ // beat times plus whether each is a bar start, thinned or doubled to the chosen rate
   const down=downFor(T);
@@ -624,7 +620,7 @@ $('syncToggle').addEventListener('click',()=>{if(!(harmony.data&&harmony.data.te
 function songTempo(){const T=harmony.data&&harmony.data.tempo; return T&&T.confidence>=.3?T:null;}
 function renderTempo(){const T=harmony.data&&harmony.data.tempo, ok=!!songTempo();
   $('songTempo').textContent=!harmony.data?'Song tempo: not analyzed yet':!T?'Song tempo: could not be found':`Song tempo: ${T.bpm} BPM${T.varies?` (moves ${Math.round(T.range[0])}–${Math.round(T.range[1])})`:''}${ok?'':' (unsure)'}`;
-  $('useTempoBtn').disabled=!T; renderDown();}
+  $('useTempoBtn').disabled=!T;}
 $('useTempoBtn').addEventListener('click',()=>{const T=harmony.data&&harmony.data.tempo; if(T) setBpm(T.bpm);});
 function localBpm(){const T=songTempo(); if(!T||!T.beats||T.beats.length<6) return 0; const sp=curTime(), b=T.beats; let lo=0,hi=b.length-1; while(lo<hi){const m=(lo+hi)>>1; if(b[m]<sp) lo=m+1; else hi=m;} const i=Math.max(0,Math.min(lo,b.length-5)); return 60*4/(b[i+4]-b[i]);}
 const countState={run:null};
