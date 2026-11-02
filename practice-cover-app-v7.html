@@ -50,6 +50,20 @@
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
     @media (max-width:540px){html{background:var(--surface)}.app{padding:0}.phone{position:fixed;inset:0;width:auto;height:var(--appH,auto);border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
     @media (display-mode:standalone) and (max-width:540px){.topbar{padding-top:calc(.2rem + max(env(safe-area-inset-top,0px),44px))}.footerNav{padding-bottom:calc(.1rem + max(env(safe-area-inset-bottom,0px),20px))}}
+    /* Computer: use the whole window. Navigation moves to a side column and the Practice tools sit side by side. */
+    @media (min-width:1000px){
+      .app{max-width:none;padding:1.25rem;align-items:stretch}
+      .phone{width:100%;max-width:1500px;margin:0 auto;height:calc(100dvh - 2.5rem);grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+      .topwrap{grid-column:1/-1;grid-row:1}
+      .screen{grid-column:2;grid-row:2;padding:1.25rem 1.5rem}
+      .footerNav{grid-column:1;grid-row:2;display:flex;flex-direction:column;gap:.35rem;padding:1rem .75rem;border-top:none;border-right:1px solid color-mix(in oklab,var(--text) 10%, transparent);align-content:start}
+      .footerNav button{text-align:left;font-size:.92rem;padding:.8rem 1rem}
+      .screen:not(#practiceScreen){max-width:880px;width:100%;margin:0 auto}
+      #practiceScreen:not(.hidden){display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));align-items:start;grid-auto-flow:dense;gap:1rem}
+      #practiceScreen>:not(.tool){grid-column:1/-1}
+      #practiceScreen>[data-tool="wave"],#practiceScreen>[data-tool="stats"],#practiceScreen>[data-tool="transport"]{grid-column:1/-1}
+      .waveCanvas{height:180px}
+    }
   </style>
 </head>
 <body>
