@@ -10,7 +10,7 @@ from pathlib import Path
 KEEP = 14
 SONG_ID = r"[0-9a-f]{10}"
 ALLOWED = re.compile(rf"^(manifest\.json|sessions\.json|client\.json|songs/{SONG_ID}/(meta|chords)\.json)$")
-CLIENT_KEYS = ("qt.layout", "qt.history", "qt.songs", "qt.sessions", "qt.deleted", "qt.theme", "qt.chordNumerals")
+CLIENT_KEYS = ("qt.layout", "qt.history", "qt.songs", "qt.sessions", "qt.deleted", "qt.theme", "qt.chordNumerals", "qt.phoneQuality")
 MAX_RESTORE_BYTES = 60_000_000
 
 
