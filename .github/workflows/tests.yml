@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
       # The tests never run Demucs, so PyTorch and Demucs are not installed here.
-      - run: pip install "numpy<2" fastapi uvicorn python-multipart pytest httpx
+      - run: pip install "numpy<2" soundfile fastapi uvicorn python-multipart pytest httpx
       - run: pytest -q tests
