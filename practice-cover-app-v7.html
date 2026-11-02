@@ -442,8 +442,17 @@ async function prepareEngine(gen){
 
 /* ---------- waveform / loop UI ---------- */
 function updateLoopUI(){const dur=curDur(); if(typeof renderMarks==='function'&&$('markList').children.length) renderMarks(); const a=loopA*dur,b=Math.max(loopB*dur,a+.2); $('loopLabel').textContent=`Loop ${formatTime(a)} → ${formatTime(b)}`; $('markerA').style.left=`${loopA*100}%`; $('markerB').style.left=`${loopB*100}%`; drawWaveform(); engineLoop(); if(typeof markLoopChips==='function'&&harmony.data) markLoopChips();}
-function updatePlayhead(){const dur=curDur(), t=curTime(); const p=dur?(t/dur):0; $('playhead').style.left=`${Math.min(100,Math.max(0,p*100))}%`; $('timeNow').textContent=formatTime(t);}
-function frame(){if(isPlaying()&&!scrubbing){updatePlayhead(); if(!engine.ready) masterLoopCheck();} if(harmony.data) updateChordNow(); requestAnimationFrame(frame);}
+const ph={left:'',time:''}, phEl=$('playhead'), timeEl=$('timeNow');
+function updatePlayhead(){const dur=curDur(), t=curTime(); const p=dur?(t/dur):0; // only touch the page when something visibly changed
+  const left=`${Math.round(Math.min(100,Math.max(0,p*100))*20)/20}%`; if(left!==ph.left){ph.left=left; phEl.style.left=left;}
+  const tx=formatTime(t); if(tx!==ph.time){ph.time=tx; timeEl.textContent=tx;}}
+let frameN=0;
+function frame(){frameN++;
+  if(!document.hidden&&!screens.practice.classList.contains('hidden')){ // nothing to animate while another tab or the app is in the background
+    if(isPlaying()&&!scrubbing){updatePlayhead(); if(!engine.ready) masterLoopCheck();}
+    if(harmony.data&&frameN%4===0) updateChordNow();}
+  else if(isPlaying()&&!engine.ready) masterLoopCheck();
+  requestAnimationFrame(frame);}
 function masterLoopCheck(){const dur=masterAudio.duration||0, a=loopA*dur, b=Math.max(loopB*dur,a+.2); if(loopEnabled&&dur&&masterAudio.currentTime>=b){masterAudio.currentTime=a; loopReps+=1; $('repsCount').textContent=`${loopReps}x`;}}
 function resizeCanvas(){const ratio=Math.max(1,window.devicePixelRatio||1), rect=waveCanvas.getBoundingClientRect(); waveCanvas.width=Math.floor(rect.width*ratio); waveCanvas.height=Math.floor(rect.height*ratio); ctx.setTransform(ratio,0,0,ratio,0,0); drawWaveform();}
 window.addEventListener('resize',resizeCanvas);
