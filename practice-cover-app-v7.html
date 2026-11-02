@@ -571,7 +571,8 @@ $('trainerToggle').addEventListener('click',()=>{trainer.on=!trainer.on; setTogg
 const metro={on:false,bpm:100,ac:null,next:0,beat:0,timer:0,taps:[],sync:false,lastBeat:-1e9,lastSp:0};
 function setBpm(v){metro.bpm=Math.max(30,Math.min(300,Math.round(v))); $('bpmValue').textContent=`${metro.bpm} BPM`;}
 function metroClick(t,accent){const ac=metro.ac, o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=accent?1600:1050; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(accent?.7:.5,t+.002); g.gain.exponentialRampToValueAtTime(.0001,t+.06); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+.08); return o;}
-function clickPrefs(){let r='1',sh=0; try{r=localStorage.getItem('qt.clickRate')||'1'; sh=Number(localStorage.getItem('qt.clickShift'))||0;}catch{} return {rate:Number(r)||1,shift:sh/1000};}
+function clickPrefs(){let r='1',sh=110; // 110 ms suits most phones until you move the slider
+   try{r=localStorage.getItem('qt.clickRate')||'1'; const v=localStorage.getItem('qt.clickShift'); sh=v===null?110:Number(v)||0;}catch{sh=110;} return {rate:Number(r)||1,shift:sh/1000};}
 {const cr=$('clickRate'), cs=$('clickShift'), pr=clickPrefs(); cr.value=String(pr.rate); cs.value=String(Math.round(pr.shift*1000)); $('clickShiftVal').textContent=`${cs.value} ms`;
  cr.addEventListener('change',()=>{try{localStorage.setItem('qt.clickRate',cr.value);}catch{} metro.lastBeat=-1e9;});
  cs.addEventListener('input',()=>{$('clickShiftVal').textContent=`${cs.value} ms`; try{localStorage.setItem('qt.clickShift',cs.value);}catch{}});}
