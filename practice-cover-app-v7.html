@@ -48,7 +48,7 @@
     .libBar{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.libBar .smallBtn{padding:.5rem .7rem;font-size:.78rem}.smallBtn.danger{background:color-mix(in oklab,var(--error) 22%,var(--offset));color:var(--error)}.smallBtn:disabled{opacity:.45}.sessionCard.picked{border-color:var(--primary);background:color-mix(in oklab,var(--primary) 12%,var(--surface2))}
     .lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:1.5rem;background:rgba(10,6,16,.72);backdrop-filter:blur(6px)}.lock .card{width:min(360px,100%)}.lock input{background:var(--offset);border:1px solid color-mix(in oklab,var(--text) 10%, transparent);border-radius:14px;padding:.9rem .95rem;outline:none}
     /* Phone: fill the screen and keep clear of the status bar, notch and home bar (must come after the base rules). */
-    @media (max-width:540px){html{background:var(--surface)}.app{padding:0}.phone{position:fixed;inset:0;width:auto;height:auto;border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
+    @media (max-width:540px){html{background:var(--surface)}.app{padding:0}.phone{position:fixed;inset:0;width:auto;height:var(--appH,auto);border-radius:0;border:none}.topbar{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}.footerNav{padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))}.footerNav button{padding-top:.85rem;padding-bottom:.85rem}}
     @media (display-mode:standalone) and (max-width:540px){.topbar{padding-top:calc(.2rem + max(env(safe-area-inset-top,0px),44px))}.footerNav{padding-bottom:calc(.1rem + max(env(safe-area-inset-bottom,0px),20px))}}
   </style>
 </head>
@@ -305,6 +305,22 @@ class QTPlayer extends AudioWorkletProcessor {
 registerProcessor('qt-player', QTPlayer);
 </script>
 <script>
+// iPhone home-screen apps start with a layout viewport that is shorter than the screen, which leaves a gap under the tab
+// bar until the first touch. Size the app from the real screen height and re-check as the window settles.
+(function(){
+  const root=document.documentElement;
+  function fit(){
+    const standalone=matchMedia('(display-mode:standalone)').matches||navigator.standalone===true;
+    const portrait=innerHeight>=innerWidth, vv=window.visualViewport?window.visualViewport.height:0;
+    let h=Math.max(innerHeight,vv);
+    if(standalone&&portrait&&innerWidth<=540&&screen.height>h&&screen.height-h<140) h=screen.height;
+    if(h>=300) root.style.setProperty('--appH',h+'px'); else root.style.removeProperty('--appH');}
+  fit(); addEventListener('resize',fit); addEventListener('orientationchange',()=>setTimeout(fit,150)); addEventListener('pageshow',fit);
+  if(window.visualViewport) visualViewport.addEventListener('resize',fit);
+  [100,400,1000,2500].forEach(t=>setTimeout(fit,t));
+})();
+</script>
+<script>
 const $=id=>document.getElementById(id);
 /* ---------- passcode (only if the PC has one set) ---------- */
 let apiKey=''; try{apiKey=localStorage.getItem('qt.key')||'';}catch{}
@@ -419,11 +435,13 @@ async function prepareEngine(gen){
       const buf=await ac.decodeAudioData(await blobs[name].arrayBuffer());
       if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
       const n=buf.length, c0=buf.getChannelData(0), c1=buf.numberOfChannels>1?buf.getChannelData(1):null;
-      const toI16=src=>{const o=new Int16Array(n); for(let i=0;i<n;i++){const v=src[i]*32767; o[i]=v>32767?32767:v<-32768?-32768:v;} return o;};
+      const CH=1<<19, pause=()=>new Promise(res=>setTimeout(res)); // work in slices so taps and scrolling stay responsive
+      const toI16=async src=>{const o=new Int16Array(n); for(let s0=0;s0<n;s0+=CH){const e=Math.min(n,s0+CH); for(let i=s0;i<e;i++){const v=src[i]*32767; o[i]=v>32767?32767:v<-32768?-32768:v;} await pause();} return o;};
       let l,r;
-      if(fmt.ch===2){l=toI16(c0); r=c1?toI16(c1):l;}
-      else if(c1){l=new Int16Array(n); for(let i=0;i<n;i++){const v=(c0[i]+c1[i])*16383.5; l[i]=v>32767?32767:v<-32768?-32768:v;} r=l;}
-      else{l=toI16(c0); r=l;}
+      if(fmt.ch===2){l=await toI16(c0); r=c1?await toI16(c1):l;}
+      else if(c1){l=new Int16Array(n); for(let s0=0;s0<n;s0+=CH){const e=Math.min(n,s0+CH); for(let i=s0;i<e;i++){const v=(c0[i]+c1[i])*16383.5; l[i]=v>32767?32767:v<-32768?-32768:v;} await pause();} r=l;}
+      else{l=await toI16(c0); r=l;}
+      if(gen!==hydrateGen){ac.close().catch(()=>{}); return;}
       const block=Math.max(1,Math.floor(n/600));
       for(let i=0;i<600;i++){let t=0,c=0; for(let j=i*block;j<Math.min(n,(i+1)*block);j+=16){t+=Math.abs(l[j]);c++;} peaks[i]+=t/Math.max(1,c)/32768;}
       maxLen=Math.max(maxLen,buf.length);
