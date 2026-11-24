@@ -361,7 +361,8 @@ def make_detail(request: Request, song_id: str):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted", "auth": bool(PASSCODE or users.load(USERS_FILE))}
+    waiting = sum(1 for j in list(JOBS.values()) if j.get("status") in ("queued", "running"))
+    return {"status": "ok", "service": "quick-tune-demucs", "device": "self-hosted", "auth": bool(PASSCODE or users.load(USERS_FILE)), "busy": waiting}
 
 
 @app.get("/api/auth-check")

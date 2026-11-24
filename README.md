@@ -44,6 +44,11 @@ python web.py 5500
 ```
 Open `http://localhost:5500/qt-stems.html`.
 
+### Starting at boot, status page, friend guide
+- `install-startup.ps1` (run once from an Administrator PowerShell) makes both servers start when Windows boots, before anyone logs in, and keep running after you log out.
+- `http://<your-pc>:5500/status` (or `https://<your-pc>.ts.net/status`) is a page friends can open without a passcode to see whether the PC and the splitting service are up, and how many songs are queued.
+- `FRIEND_GUIDE.md` is the one-page "how to connect" for friends: replace the address placeholders with yours (a filled-in copy named `*.local.md` stays out of git) and send it with their invite.
+
 ### Passcode
 If `passcode.txt` exists (or the `QT_PASSCODE` environment variable is set), the backend refuses every request without it, and the app asks for it once per device. Delete the file to turn the lock off. Restart the backend after changing it.
 

@@ -12,7 +12,8 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parent
 PAGE = "/qt-stems.html"
 OLD_PAGE = "/practice-cover-app-v7.html"  # the old name: bookmarks and home-screen icons made before the rename still land here
-ALLOWED = {PAGE, "/logo.svg", "/manifest.webmanifest"}
+STATUS = "/status"
+ALLOWED = {PAGE, STATUS, "/logo.svg", "/manifest.webmanifest"}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -31,6 +32,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Location", PAGE)
             self.end_headers()
             return False
+        if raw == STATUS:
+            self.path = "/status.html"  # the friendly address has no .html; the file itself stays unlisted
+            return True
         if not self._allowed():
             self.send_error(404)
             return False

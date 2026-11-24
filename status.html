@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QT Stems status</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--sub:#6e6e73;--good:#1a7f37;--bad:#c62828;--warn:#9a6700}
+@media (prefers-color-scheme:dark){:root{--bg:#111114;--card:#1c1c20;--text:#f2f2f4;--sub:#9a9aa3;--good:#4cc16a;--bad:#ff6b6b;--warn:#e3b341}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif;padding:24px 16px}
+main{max-width:480px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}.sub{color:var(--sub);margin:0 0 20px}
+.card{background:var(--card);border-radius:14px;padding:6px 16px;margin-bottom:16px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--sub) 25%,transparent)}
+.row:last-child{border:0}.good{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+button{font:inherit;padding:10px 16px;border-radius:10px;border:0;background:#0a84ff;color:#fff}
+a{color:#0a84ff}
+</style></head><body><main>
+<h1>QT Stems status</h1>
+<p class="sub">Is the host PC reachable right now? No passcode needed here.</p>
+<div class="card">
+<div class="row"><span>Page server</span><span id="page" class="good">up</span></div>
+<div class="row"><span>Splitting service</span><span id="api">checking…</span></div>
+<div class="row"><span>Songs waiting or splitting</span><span id="busy">–</span></div>
+<div class="row"><span>Checked</span><span id="when">–</span></div>
+</div>
+<p id="hint" class="sub"></p>
+<button id="again">Check again</button>
+<p class="sub"><a href="/qt-stems.html">Open the app</a></p>
+<script>
+const base = location.protocol==='https:' ? `https://${location.hostname}:8443` : `http://${location.hostname}:8000`;
+const $ = id => document.getElementById(id);
+async function check(){
+  $('api').textContent='checking…'; $('api').className=''; $('hint').textContent='';
+  try{
+    const r = await fetch(base+'/api/health',{cache:'no-store',signal:AbortSignal.timeout(6000)});
+    const h = await r.json();
+    $('api').textContent='up'; $('api').className='good';
+    $('busy').textContent = h.busy ?? '–';
+    if((h.busy||0)>0) $('hint').textContent='The PC is busy splitting songs, so yours may wait a little.';
+  }catch(e){
+    $('api').textContent='not reachable'; $('api').className='bad'; $('busy').textContent='–';
+    $('hint').textContent='The page loads but the splitting service does not answer. Is Tailscale on? If it still fails, send the owner a screenshot of this page.';
+  }
+  $('when').textContent=new Date().toLocaleTimeString();
+}
+$('again').onclick=check; check(); setInterval(check,30000);
+</script></main></body></html>
