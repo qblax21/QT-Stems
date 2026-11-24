@@ -51,13 +51,13 @@ If `passcode.txt` exists (or the `QT_PASSCODE` environment variable is set), the
 Your passcode is the owner's. Everyone else gets their own, managed with `users.py` (changes apply immediately, no restart):
 
 ```
-python users.py add "Alex"       # prints the passcode to send them
-python users.py list             # who is here, how much space they use
-python users.py reset alex       # new passcode; the old one stops working
+python users.py add "Alex"       # prints the passcode ONCE; only a salted hash is stored
+python users.py list             # who is here, how much space they use (passcodes are never shown)
+python users.py reset alex       # new passcode, printed once; the old one stops working
 python users.py remove alex      # cut them off (--delete-songs also deletes their songs)
 ```
 
-A friend sees only their own Library, sessions and downloads, uploads to and splits on this PC (one at a time, two queued at most), and cannot open anyone else's songs or the owner's backup and error pages. Defaults: 5 GB of songs and 200 MB per upload per friend (`--quota-gb`, `--upload-mb`). Songs made before accounts existed belong to the owner. Wrong passcodes lock an address out for ten minutes after ten tries. Friend passcodes live in `users.json` (not committed).
+A friend sees only their own Library, sessions and downloads, uploads to and splits on this PC (one at a time, two queued at most), and cannot open anyone else's songs or the owner's backup and error pages. Defaults: 5 GB of songs and 200 MB per upload per friend (`--quota-gb`, `--upload-mb`). Songs made before accounts existed belong to the owner. Five wrong passcodes lock an address out for ten minutes. Friend passcodes are stored only as salted argon2 hashes in `users.json` (not committed), so they cannot be looked up later: use `reset` if one is lost.
 
 ### From your phone
 1. Find your PC's IPv4 address (`ipconfig`), or its Tailscale address (starts with `100.`) when away from home.

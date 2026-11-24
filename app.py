@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 import asyncio
+import hashlib
 import hmac
 import json
 import os
@@ -42,7 +43,7 @@ PASSCODE = _load_passcode()
 MAX_UPLOAD_MB = int(os.environ.get("QT_MAX_UPLOAD_MB", "500"))
 OWNER = {"id": users.OWNER_ID, "name": "Owner", "admin": True}
 ADMIN_PATHS = ("/api/backup", "/api/restore", "/api/last-error")  # the owner's own housekeeping, never for friends
-MAX_FAILS, FAIL_WINDOW = 10, 600  # wrong passcodes allowed per address, per ten minutes
+MAX_FAILS, FAIL_WINDOW = 5, 600  # wrong passcodes allowed per address, per ten minutes
 LOGIN_FAILS = {}
 
 
@@ -51,16 +52,29 @@ def _client_ip(request: Request) -> str:
     return fwd.split(",")[-1].strip() or (request.client.host if request.client else "?")
 
 
+_PROVEN = {}  # sha256(passcode) -> (friend id, stored hash): argon2 is slow on purpose, so run it once per passcode, not per request
+
+
 def identify(key: str):
     """The person this passcode belongs to, or None. With no passcodes configured at all the server is open (the owner)."""
     friends = users.load(USERS_FILE)
     if not PASSCODE and not friends:
         return OWNER
-    found = None
-    for secret, person in ([(PASSCODE, OWNER)] if PASSCODE else []) + [(f["key"], f) for f in friends]:
-        if hmac.compare_digest(key.encode(), secret.encode()):  # compare against everyone so timing reveals nothing
-            found = person
-    return found
+    if PASSCODE and hmac.compare_digest(key.encode(), PASSCODE.encode()):
+        return OWNER
+    if not key:
+        return None
+    token = hashlib.sha256(key.encode()).hexdigest()
+    for f in friends:
+        if _PROVEN.get(token) == (f["id"], f["hash"]):
+            return f
+    for f in friends:
+        if users.check_key(f["hash"], key):
+            if len(_PROVEN) > 500:
+                _PROVEN.clear()
+            _PROVEN[token] = (f["id"], f["hash"])
+            return f
+    return None
 
 
 def _user(request: Request) -> dict:

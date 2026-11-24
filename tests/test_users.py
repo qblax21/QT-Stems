@@ -1,5 +1,6 @@
 """Separate profiles: a friend's passcode shows only their own songs, sessions and downloads."""
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -166,16 +167,22 @@ def test_cli_add_list_reset_remove(tmp_path, monkeypatch, capsys):
     run = lambda *a: users.main(list(a), users_file=f, stems_dir=stems, library_dir=lib)  # noqa: E731
     assert run("add", "Alex B") == 0
     person = users.load(f)[0]
-    assert person["id"] == "alex-b" and len(person["key"]) == users.KEY_LENGTH and person["key"] in capsys.readouterr().out
+    out = capsys.readouterr().out
+    key = re.search(r"Passcode: (\S+)", out).group(1)
+    assert person["id"] == "alex-b" and len(key) == users.KEY_LENGTH and users.check_key(person["hash"], key)
     assert run("add", "alex b") == 1  # duplicate
     song = stems / "dddddddddd"
     song.mkdir()
     (song / "meta.json").write_text(json.dumps({"owner": "alex-b"}))
     (song / "vocals.mp3").write_bytes(b"x" * 10)
     (lib / "dddddddddd.mp3").write_bytes(b"y" * 5)
-    assert run("list") == 0 and "1 songs" in capsys.readouterr().out
-    old = person["key"]
-    assert run("reset", "alex-b") == 0 and users.load(f)[0]["key"] != old
+    assert run("list") == 0
+    listing = capsys.readouterr().out
+    assert "1 songs" in listing and key not in listing and person["hash"] not in listing  # passcodes are never shown again
+    assert run("reset", "alex-b") == 0
+    new_key = re.search(r"alex-b: (\S+)", capsys.readouterr().out).group(1)
+    stored = users.load(f)[0]["hash"]
+    assert new_key != key and users.check_key(stored, new_key) and not users.check_key(stored, key)
     assert run("remove", "alex-b") == 0 and users.load(f) == [] and song.is_dir()
     assert run("add", "Alex B") == 0
     assert run("remove", "alex-b", "--delete-songs") == 0 and not song.exists() and not (lib / "dddddddddd.mp3").exists()
@@ -187,3 +194,40 @@ def test_cli_refuses_to_add_friends_while_the_owner_has_no_passcode(tmp_path, mo
     monkeypatch.setattr(users, "BASE_DIR", tmp_path)  # no passcode.txt here
     assert users.main(["add", "Alex"], users_file=tmp_path / "users.json", stems_dir=tmp_path, library_dir=tmp_path) == 1
     assert not (tmp_path / "users.json").exists()
+
+
+# ---- passcodes are stored hashed ------------------------------------------------------------------------------
+
+def test_friend_passcodes_are_saved_as_salted_hashes(client):
+    users.save(backend.USERS_FILE, [{"id": "alex", "name": "Alex", "key": "alexkey123"}, {"id": "bo", "name": "Bo", "key": "alexkey123"}])
+    raw = backend.USERS_FILE.read_text()
+    assert "alexkey123" not in raw and '"key"' not in raw and raw.count("$argon2") == 2
+    a, b = (p["hash"] for p in users.load(backend.USERS_FILE))
+    assert a != b  # same passcode, different salt
+    assert users.check_key(a, "alexkey123") and not users.check_key(a, "alexkey124")
+
+
+def test_an_old_plain_text_users_file_is_converted_on_first_read(client):
+    backend.USERS_FILE.write_text(json.dumps({"users": [{"id": "alex", "name": "Alex", "key": "alexkey123"}]}))
+    assert users.load(backend.USERS_FILE)[0]["id"] == "alex"
+    raw = backend.USERS_FILE.read_text()
+    assert "alexkey123" not in raw and "$argon2" in raw
+    assert client.get("/api/library", headers={"X-QT-Key": "alexkey123"}).status_code == 200
+
+
+def test_login_still_works_after_a_passcode_is_proven_once_and_then_reset(two):
+    client, *_ = two
+    assert client.get("/api/library", headers=ALEX).status_code == 200
+    assert client.get("/api/library", headers=ALEX).status_code == 200  # served from the proven-passcode cache
+    users.save(backend.USERS_FILE, [{"id": "alex", "name": "Alex", "key": "newkey99999"}])  # reset
+    assert client.get("/api/library", headers=ALEX).status_code == 401
+    assert client.get("/api/library", headers={"X-QT-Key": "newkey99999"}).status_code == 200
+
+
+def test_five_wrong_passcodes_lock_an_address_out(two):
+    client, *_ = two
+    assert backend.MAX_FAILS == 5
+    for _ in range(5):
+        assert client.get("/api/library", headers={"X-QT-Key": "wrongwrong"}).status_code == 401
+    assert client.get("/api/library", headers={"X-QT-Key": "wrongwrong"}).status_code == 429
+    assert client.get("/api/library", headers=ALEX).status_code == 429
